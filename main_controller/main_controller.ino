@@ -13,7 +13,7 @@ This sketch is written for the "Main Controller" PCBA. It serves several funtion
 
 #include <SerialCmd.h>
 #include <Wire.h>
-#include <SparkFun_VL53L5CX_Library.h>
+#include <Adafruit_NeoPixel.h>
 
 #define SERIALCMD_MAXCMDNUM 30    // Max number of commands
 #define SERIALCMD_MAXCMDLNG 12     // Max command name length
@@ -21,11 +21,7 @@ This sketch is written for the "Main Controller" PCBA. It serves several funtion
 
 SerialCmd mySerCmd(Serial);       // Initialize the SerialCmd constructor using the "Serial" port
 
-SparkFun_VL53L5CX myImager;
-VL53L5CX_ResultsData measurementData; // Result data class structure, 1356 byes of RAM
-int imageResolution = 0; //Used to pretty print output
-int imageWidth = 0; //Used to pretty print output
-
+Adafruit_NeoPixel onboard_pixel(1, PIN_NEOPIXEL);
 
 // ------------------- User functions --------------------
 void sendOK(void) {
@@ -410,122 +406,29 @@ void Send_Motor(void) {
   sendOK();
 }
 
-// Get current TOF data - TOF
-// Example - "TOF"
-void Get_TOF(void) {
-  int left_count = 0;
-  int right_count = 0;
-  if (myImager.isDataReady() == true) {
-    if (myImager.getRangingData(&measurementData)) {
-      for (int y = 0 ; y <= imageWidth * (imageWidth - 1) ; y += imageWidth) {
-        for (int x = imageWidth - 1 ; x >= 0 ; x--) {
-          mySerCmd.Print((char *) "\t");
-          if(((x + y)*0.125) - floor((x + y)*0.125) < 0.5) {
-            mySerCmd.Print((char *) "0: ");
-            if (measurementData.distance_mm[x + y] <= 90) {
-              left_count++;
-            }
-          } else {
-            mySerCmd.Print((char *) "1: ");
-            if (measurementData.distance_mm[x + y] <= 90) {
-              right_count++;
-            }
-          }
-          mySerCmd.Print(measurementData.distance_mm[x + y]);
-        }
-        mySerCmd.Print((char *) "\r\n");
-      }
-      mySerCmd.Print((char *) "\r\n");
-    }
-  }
-  mySerCmd.Print((char *) "\r\n");
-  mySerCmd.Print((char *) "Left side count: ");
-  mySerCmd.Print(left_count);
-  mySerCmd.Print((char *) "\r\n");
-  mySerCmd.Print((char *) "Right side count: ");
-  mySerCmd.Print(right_count);
-  mySerCmd.Print((char *) "\r\n");
-  mySerCmd.Print((char *) "\r\n");
-
-  sendOK();
-}
-
-// Check for an object in the ToF path
-// Example - "TOF"
-void Check_TOF(void) {
-  int left_count;
-  int right_count;
-  if (myImager.isDataReady() == true) {
-    if (myImager.getRangingData(&measurementData)) {
-      for (int y = 0 ; y <= imageWidth * (imageWidth - 1) ; y += imageWidth) {
-        for (int x = imageWidth - 1 ; x >= 0 ; x--) {
-          mySerCmd.Print((char *) "\t");
-          if(((x + y)*0.125) - floor((x + y)*0.125) < 0.5) {
-            mySerCmd.Print((char *) "0: ");
-            if (measurementData.distance_mm[x + y] <= 80) {
-              left_count++;
-            }
-          } else {
-            mySerCmd.Print((char *) "1: ");
-            if (measurementData.distance_mm[x + y] <= 80) {
-              right_count++;
-            }
-          }
-          mySerCmd.Print(measurementData.distance_mm[x + y]);
-        }
-        mySerCmd.Print((char *) "\r\n");
-      }
-      mySerCmd.Print((char *) "\r\n");
-    }
-  }
-  mySerCmd.Print((char *) "\r\n");
-  mySerCmd.Print((char *) "Left side count: ");
-  mySerCmd.Print(left_count);
-  mySerCmd.Print((char *) "\r\n");
-  mySerCmd.Print((char *) "Right side count: ");
-  mySerCmd.Print(right_count);
-
-
-  sendOK();
-}
-
 
 // ----------------------- setup() -----------------------
 void setup() {
-  Serial.begin(230400);
-  while(!Serial);
+  Serial.begin(115200);
+  //while(!Serial);
   Serial1.begin(230400);
 
-  // Set up QWIIC/I2C
-  Wire.begin(); //This resets to 100kHz I2C
-  Wire.setClock(400000); //Sensor has max I2C freq of 400kHz
-
-  Serial.println("Initializing sensor board. This can take up to 10s. Please wait.");
-  if (myImager.begin() == false) {
-    Serial.println(F("Sensor not found - check your wiring."));
-    //while (1) ;
-  } else {
-    myImager.setResolution(8*8); //Enable all 64 pads
-    
-    imageResolution = myImager.getResolution(); //Query sensor for current resolution - either 4x4 or 8x8
-    imageWidth = sqrt(imageResolution); //Calculate printing width
-
-    myImager.startRanging();
-  }
+  onboard_pixel.begin();
+  onboard_pixel.setPixelColor(0, onboard_pixel.Color(0, 0, 10));
+  onboard_pixel.show();
 
   // Command Setup
   mySerCmd.AddCmd("PING", SERIALCMD_FROMALL, Send_Ping);
   mySerCmd.AddCmd("INIT", SERIALCMD_FROMALL, Send_Handshake);
-  mySerCmd.AddCmd("GETML", SERIALCMD_FROMALL, Get_MapList);
-//  mySerCmd.AddCmd("GETMAP1", SERIALCMD_FROMALL, Get_Map1);
-//  mySerCmd.AddCmd("GETMAP2", SERIALCMD_FROMALL, Get_Map2);
-//  mySerCmd.AddCmd("GETMAP3", SERIALCMD_FROMALL, Get_Map3);
-//  mySerCmd.AddCmd("GETMAP4", SERIALCMD_FROMALL, Get_Map4);
+  //mySerCmd.AddCmd("GETML", SERIALCMD_FROMALL, Get_MapList);
+  //mySerCmd.AddCmd("GETMAP1", SERIALCMD_FROMALL, Get_Map1);
+  //mySerCmd.AddCmd("GETMAP2", SERIALCMD_FROMALL, Get_Map2);
+  //mySerCmd.AddCmd("GETMAP3", SERIALCMD_FROMALL, Get_Map3);
+  //mySerCmd.AddCmd("GETMAP4", SERIALCMD_FROMALL, Get_Map4);
   mySerCmd.AddCmd("ENTER", SERIALCMD_FROMALL, Send_Enter);
   mySerCmd.AddCmd("GOTO", SERIALCMD_FROMALL, Send_Goto);
   mySerCmd.AddCmd("DOCK", SERIALCMD_FROMALL, Send_Dock);
   mySerCmd.AddCmd("MOTOR", SERIALCMD_FROMALL, Send_Motor);
-  mySerCmd.AddCmd("TOF", SERIALCMD_FROMALL, Get_TOF);
 
   // Setup
   mySerCmd.Print((char *) "INFO: Starting application...\r\n");
