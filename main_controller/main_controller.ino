@@ -14,14 +14,25 @@ This sketch is written for the "Main Controller" PCBA. It serves several funtion
 #include <SerialCmd.h>
 #include <Wire.h>
 #include <Adafruit_NeoPixel.h>
+#include <vl53l7cx_class.h>
 
 #define SERIALCMD_MAXCMDNUM 30    // Max number of commands
 #define SERIALCMD_MAXCMDLNG 12     // Max command name length
 #define SERIALCMD_MAXBUFFER 256    // Max buffer length
 
+#define I2C Wire
+
 SerialCmd mySerCmd(Serial);       // Initialize the SerialCmd constructor using the "Serial" port
 
 Adafruit_NeoPixel onboard_pixel(1, PIN_NEOPIXEL);
+
+void compare_left_result(VL53L7CX_ResultsData *Result);
+void compare_right_result(VL53L7CX_ResultsData *Result);
+
+VL53L7CX sensor_vl53l7cx_right(&I2C, 3); // LPn Enable Pin on D3
+VL53L7CX sensor_vl53l7cx_left(&I2C, 10); // Requires LPn to be set so using unused pin D10
+char report[256];
+
 
 // ------------------- User functions --------------------
 void sendOK(void) {
@@ -311,11 +322,76 @@ void Send_Motor(void) {
 }
 
 
+/* --------------------------------  Compare Left Result  -------------------------------*/
+void compare_left_result(VL53L7CX_ResultsData *Result) {
+  int8_t i, j, k;
+  uint8_t zones_per_line;
+  uint8_t number_of_zones = VL53L7CX_RESOLUTION_4X4;
+  long left_calibration_values[] = {220, 275, 271, 397, 125, 406, 450, 390, 227, 452, 419, 350, 250, 387, 364, 312};
+  long distance_value;
+  long target_status;
+  long compare_value;
+  int object_detected = 0;
+
+  zones_per_line = (number_of_zones == 16) ? 4 : 8;
+
+  for (j = 0; j < number_of_zones; j += zones_per_line) {
+    for (k = (zones_per_line - 1); k >= 0; k--) {
+      distance_value = (long)Result->distance_mm[j+k];
+      target_status = (long)Result->target_status[j+k];
+      compare_value = distance_value - left_calibration_values[j+k];
+      if ((compare_value <= 0) && (distance_value != 0) && (target_status == 5)) {
+        object_detected = 1;
+      }
+    }
+  }
+
+  if (object_detected == 1) {
+    mySerCmd.Print((char *) "STATUS: Left Object Detected!\r\n");
+    Send_Bump();
+  }
+}
+
+
+/* -------------------------------  Compare Right Result  -------------------------------*/
+void compare_right_result(VL53L7CX_ResultsData *Result) {
+  int8_t i, j, k;
+  uint8_t zones_per_line;
+  uint8_t number_of_zones = VL53L7CX_RESOLUTION_4X4;
+  long right_calibration_values[] = {228, 385, 362, 309, 233, 430, 400, 338, 235, 259, 438, 375, 134, 245, 364, 376};
+  long distance_value;
+  long target_status;
+  long compare_value;
+  int object_detected = 0;
+
+  zones_per_line = (number_of_zones == 16) ? 4 : 8;
+
+  for (j = 0; j < number_of_zones; j += zones_per_line) {
+    for (k = (zones_per_line - 1); k >= 0; k--) {
+      distance_value = (long)Result->distance_mm[j+k];
+      target_status = (long)Result->target_status[j+k];
+      compare_value = distance_value - right_calibration_values[j+k];
+      if ((compare_value <= 0) && (distance_value != 0) && (target_status == 5)) {
+        object_detected = 1;
+      }
+    }
+  }
+
+  if (object_detected == 1) {
+    mySerCmd.Print((char *) "STATUS: Right Object Detected!\r\n");
+    Send_Bump();
+  }
+}
+
+
 // ----------------------- setup() -----------------------
 void setup() {
   Serial.begin(115200);
-  //while(!Serial);
   Serial1.begin(230400);
+
+  delay(1000);
+
+  mySerCmd.Print((char *) "INFO: Initalizing application...\r\n");
 
   onboard_pixel.begin();
   onboard_pixel.setPixelColor(0, onboard_pixel.Color(0, 0, 10));
@@ -331,7 +407,50 @@ void setup() {
   //mySerCmd.AddCmd("MOTOR", SERIALCMD_FROMALL, Send_Motor);  
   //mySerCmd.AddCmd("GETML", SERIALCMD_FROMALL, Get_MapList);
 
-  // Setup
+  // ToF Setup and Configuration
+  mySerCmd.Print((char *) "INFO: Downloading sensor firmware and itializing settings...\r\n");
+
+  // Initialize I2C bus.
+  I2C.begin();
+
+  // Configure VL53L7CX component.
+  sensor_vl53l7cx_right.begin();
+  mySerCmd.Print((char *) "INFO: Disabling right sensor\r\n");
+  sensor_vl53l7cx_right.vl53l7cx_off();
+
+  delay(100);
+
+  sensor_vl53l7cx_left.begin();
+  
+  mySerCmd.Print((char *) "INFO: Loading left sensor firmware\r\n");
+  sensor_vl53l7cx_left.init_sensor();
+
+  mySerCmd.Print((char *) "INFO: Loading left sensor settings\r\n");
+  sensor_vl53l7cx_left.vl53l7cx_set_resolution(VL53L7CX_RESOLUTION_4X4); // VL53L7CX_RESOLUTION_4X4, VL53L7CX_RESOLUTION_8X8
+  sensor_vl53l7cx_left.vl53l7cx_set_target_order(VL53L7CX_TARGET_ORDER_CLOSEST);
+  sensor_vl53l7cx_left.vl53l7cx_set_ranging_mode(VL53L7CX_RANGING_MODE_CONTINUOUS);
+  sensor_vl53l7cx_left.vl53l7cx_set_ranging_frequency_hz(4);
+  sensor_vl53l7cx_left.vl53l7cx_set_i2c_address(0x54); // 0x52 (0x29), 0x54 (0x2A)
+
+  // Configure VL53L7CX component.
+  mySerCmd.Print((char *) "INFO: Enabling right sensor\r\n");
+  sensor_vl53l7cx_right.vl53l7cx_on();
+
+  mySerCmd.Print((char *) "INFO: Loading right sensor firmware\r\n");
+  sensor_vl53l7cx_right.init_sensor();
+
+  mySerCmd.Print((char *) "INFO: Loading right sensor settings\r\n");
+  sensor_vl53l7cx_right.vl53l7cx_set_resolution(VL53L7CX_RESOLUTION_4X4); // VL53L7CX_RESOLUTION_4X4, VL53L7CX_RESOLUTION_8X8
+  sensor_vl53l7cx_right.vl53l7cx_set_target_order(VL53L7CX_TARGET_ORDER_CLOSEST);
+  sensor_vl53l7cx_right.vl53l7cx_set_ranging_mode(VL53L7CX_RANGING_MODE_CONTINUOUS);
+  sensor_vl53l7cx_right.vl53l7cx_set_ranging_frequency_hz(4);
+
+  mySerCmd.Print((char *) "INFO: Initialization of serial port and sensor is complete. Start ranging.\r\n");
+
+  // Start Measurements
+  sensor_vl53l7cx_right.vl53l7cx_start_ranging();
+  sensor_vl53l7cx_left.vl53l7cx_start_ranging();
+
   mySerCmd.Print((char *) "INFO: Starting application...\r\n");
 }
 
@@ -343,6 +462,31 @@ void loop() {
   int incomingPacketLen;
   byte lenByte;
   int8_t ret;
+  
+  // ToF variables and commands
+  VL53L7CX_ResultsData Results;
+  uint8_t NewDataReadyRight = 0;
+  uint8_t statusRight;
+  uint8_t NewDataReadyLeft = 0;
+  uint8_t statusLeft;
+
+  do {
+    statusRight = sensor_vl53l7cx_right.vl53l7cx_check_data_ready(&NewDataReadyRight);
+  } while (!NewDataReadyRight);
+
+  if ((!statusRight) && (NewDataReadyRight != 0)) {
+    statusRight = sensor_vl53l7cx_right.vl53l7cx_get_ranging_data(&Results);
+    compare_right_result(&Results);
+  }
+
+  do {
+    statusLeft = sensor_vl53l7cx_left.vl53l7cx_check_data_ready(&NewDataReadyLeft);
+  } while (!NewDataReadyLeft);
+
+  if ((!statusLeft) && (NewDataReadyLeft != 0)) {
+    statusLeft = sensor_vl53l7cx_left.vl53l7cx_get_ranging_data(&Results);
+    compare_left_result(&Results);
+  }
 
   // Check for incoming serial commands
   ret = mySerCmd.ReadSer();
