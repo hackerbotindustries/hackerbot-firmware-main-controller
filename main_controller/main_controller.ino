@@ -33,6 +33,10 @@ VL53L7CX sensor_vl53l7cx_right(&I2C, 3); // LPn Enable Pin on D3
 VL53L7CX sensor_vl53l7cx_left(&I2C, 10); // Requires LPn to be set so using unused pin D10
 char report[256];
 
+int tofs_attached = 0;
+int head_attached = 0;
+int arm_attached = 0;
+
 
 // ------------------- User functions --------------------
 void sendOK(void) {
@@ -386,7 +390,11 @@ void compare_right_result(VL53L7CX_ResultsData *Result) {
 
 // ----------------------- setup() -----------------------
 void setup() {
+  unsigned long serialTimout = millis();
+
   Serial.begin(115200);
+  while(!Serial && millis() - serialTimout <= 5000);
+
   Serial1.begin(230400);
 
   delay(1000);
@@ -407,49 +415,81 @@ void setup() {
   //mySerCmd.AddCmd("MOTOR", SERIALCMD_FROMALL, Send_Motor);  
   //mySerCmd.AddCmd("GETML", SERIALCMD_FROMALL, Get_MapList);
 
-  // ToF Setup and Configuration
-  mySerCmd.Print((char *) "INFO: Downloading sensor firmware and itializing settings...\r\n");
-
   // Initialize I2C bus.
   I2C.begin();
 
-  // Configure VL53L7CX component.
-  sensor_vl53l7cx_right.begin();
-  mySerCmd.Print((char *) "INFO: Disabling right sensor\r\n");
-  sensor_vl53l7cx_right.vl53l7cx_off();
+  mySerCmd.Print((char *) "I2C scanner. Scanning ...\r\n");
+  byte count = 0;
+  for (byte i = 1; i < 120; i++)
+  {
+    I2C.beginTransmission (i);
+    if (I2C.endTransmission () == 0)
+      {
+      mySerCmd.Print((char *) "Found address: ");
+      mySerCmd.Print(i);
+      mySerCmd.Print((char *) " (0x");
+      mySerCmd.Print(i);
+      mySerCmd.Print((char *) ")\r\n");
+      count++;
+      delay (1);  // maybe unneeded?
+      } // end of good response
+  } // end of for loop
+  mySerCmd.Print((char *) "Done.\r\n");
+  mySerCmd.Print((char *) "Found ");
+  mySerCmd.Print(count);
+  mySerCmd.Print((char *) " device(s).\r\n");
 
-  delay(100);
-
-  sensor_vl53l7cx_left.begin();
+  I2C.beginTransmission(75);
+  if (I2C.endTransmission () == 0)
+    mySerCmd.Print((char *) "STATUS: Temperature Sensor Attached\r\n");
+  I2C.beginTransmission(41);
+  if (I2C.endTransmission () == 0) {
+    tofs_attached = 1;
+    mySerCmd.Print((char *) "STATUS: Time of Flight Sensors Attached\r\n");
+  }
   
-  mySerCmd.Print((char *) "INFO: Loading left sensor firmware\r\n");
-  sensor_vl53l7cx_left.init_sensor();
+  if (tofs_attached) {
+    // ToF Setup and Configuration
+    mySerCmd.Print((char *) "INFO: Downloading sensor firmware and itializing settings...\r\n");
 
-  mySerCmd.Print((char *) "INFO: Loading left sensor settings\r\n");
-  sensor_vl53l7cx_left.vl53l7cx_set_resolution(VL53L7CX_RESOLUTION_4X4); // VL53L7CX_RESOLUTION_4X4, VL53L7CX_RESOLUTION_8X8
-  sensor_vl53l7cx_left.vl53l7cx_set_target_order(VL53L7CX_TARGET_ORDER_CLOSEST);
-  sensor_vl53l7cx_left.vl53l7cx_set_ranging_mode(VL53L7CX_RANGING_MODE_CONTINUOUS);
-  sensor_vl53l7cx_left.vl53l7cx_set_ranging_frequency_hz(4);
-  sensor_vl53l7cx_left.vl53l7cx_set_i2c_address(0x54); // 0x52 (0x29), 0x54 (0x2A)
+    // Configure VL53L7CX component.
+    sensor_vl53l7cx_right.begin();
+    mySerCmd.Print((char *) "INFO: Disabling right sensor\r\n");
+    sensor_vl53l7cx_right.vl53l7cx_off();
 
-  // Configure VL53L7CX component.
-  mySerCmd.Print((char *) "INFO: Enabling right sensor\r\n");
-  sensor_vl53l7cx_right.vl53l7cx_on();
+    delay(100);
 
-  mySerCmd.Print((char *) "INFO: Loading right sensor firmware\r\n");
-  sensor_vl53l7cx_right.init_sensor();
+    sensor_vl53l7cx_left.begin();
+    
+    mySerCmd.Print((char *) "INFO: Loading left sensor firmware\r\n");
+    sensor_vl53l7cx_left.init_sensor();
 
-  mySerCmd.Print((char *) "INFO: Loading right sensor settings\r\n");
-  sensor_vl53l7cx_right.vl53l7cx_set_resolution(VL53L7CX_RESOLUTION_4X4); // VL53L7CX_RESOLUTION_4X4, VL53L7CX_RESOLUTION_8X8
-  sensor_vl53l7cx_right.vl53l7cx_set_target_order(VL53L7CX_TARGET_ORDER_CLOSEST);
-  sensor_vl53l7cx_right.vl53l7cx_set_ranging_mode(VL53L7CX_RANGING_MODE_CONTINUOUS);
-  sensor_vl53l7cx_right.vl53l7cx_set_ranging_frequency_hz(4);
+    mySerCmd.Print((char *) "INFO: Loading left sensor settings\r\n");
+    sensor_vl53l7cx_left.vl53l7cx_set_resolution(VL53L7CX_RESOLUTION_4X4); // VL53L7CX_RESOLUTION_4X4, VL53L7CX_RESOLUTION_8X8
+    sensor_vl53l7cx_left.vl53l7cx_set_target_order(VL53L7CX_TARGET_ORDER_CLOSEST);
+    sensor_vl53l7cx_left.vl53l7cx_set_ranging_mode(VL53L7CX_RANGING_MODE_CONTINUOUS);
+    sensor_vl53l7cx_left.vl53l7cx_set_ranging_frequency_hz(4);
+    sensor_vl53l7cx_left.vl53l7cx_set_i2c_address(0x54); // 0x52 (0x29), 0x54 (0x2A)
 
-  mySerCmd.Print((char *) "INFO: Initialization of serial port and sensor is complete. Start ranging.\r\n");
+    // Configure VL53L7CX component.
+    mySerCmd.Print((char *) "INFO: Enabling right sensor\r\n");
+    sensor_vl53l7cx_right.vl53l7cx_on();
 
-  // Start Measurements
-  sensor_vl53l7cx_right.vl53l7cx_start_ranging();
-  sensor_vl53l7cx_left.vl53l7cx_start_ranging();
+    mySerCmd.Print((char *) "INFO: Loading right sensor firmware\r\n");
+    sensor_vl53l7cx_right.init_sensor();
+
+    mySerCmd.Print((char *) "INFO: Loading right sensor settings\r\n");
+    sensor_vl53l7cx_right.vl53l7cx_set_resolution(VL53L7CX_RESOLUTION_4X4); // VL53L7CX_RESOLUTION_4X4, VL53L7CX_RESOLUTION_8X8
+    sensor_vl53l7cx_right.vl53l7cx_set_target_order(VL53L7CX_TARGET_ORDER_CLOSEST);
+    sensor_vl53l7cx_right.vl53l7cx_set_ranging_mode(VL53L7CX_RANGING_MODE_CONTINUOUS);
+    sensor_vl53l7cx_right.vl53l7cx_set_ranging_frequency_hz(4);
+
+    mySerCmd.Print((char *) "INFO: Initialization of serial port and sensor is complete. Start ranging.\r\n");
+
+    // Start Measurements
+    sensor_vl53l7cx_right.vl53l7cx_start_ranging();
+    sensor_vl53l7cx_left.vl53l7cx_start_ranging();
+  }
 
   mySerCmd.Print((char *) "INFO: Starting application...\r\n");
 }
@@ -463,29 +503,31 @@ void loop() {
   byte lenByte;
   int8_t ret;
   
-  // ToF variables and commands
-  VL53L7CX_ResultsData Results;
-  uint8_t NewDataReadyRight = 0;
-  uint8_t statusRight;
-  uint8_t NewDataReadyLeft = 0;
-  uint8_t statusLeft;
+   if (tofs_attached) {
+    // ToF variables and commands
+    VL53L7CX_ResultsData Results;
+    uint8_t NewDataReadyRight = 0;
+    uint8_t statusRight;
+    uint8_t NewDataReadyLeft = 0;
+    uint8_t statusLeft;
 
-  do {
-    statusRight = sensor_vl53l7cx_right.vl53l7cx_check_data_ready(&NewDataReadyRight);
-  } while (!NewDataReadyRight);
+    do {
+      statusRight = sensor_vl53l7cx_right.vl53l7cx_check_data_ready(&NewDataReadyRight);
+    } while (!NewDataReadyRight);
 
-  if ((!statusRight) && (NewDataReadyRight != 0)) {
-    statusRight = sensor_vl53l7cx_right.vl53l7cx_get_ranging_data(&Results);
-    compare_right_result(&Results);
-  }
+    if ((!statusRight) && (NewDataReadyRight != 0)) {
+      statusRight = sensor_vl53l7cx_right.vl53l7cx_get_ranging_data(&Results);
+      compare_right_result(&Results);
+    }
 
-  do {
-    statusLeft = sensor_vl53l7cx_left.vl53l7cx_check_data_ready(&NewDataReadyLeft);
-  } while (!NewDataReadyLeft);
+    do {
+      statusLeft = sensor_vl53l7cx_left.vl53l7cx_check_data_ready(&NewDataReadyLeft);
+    } while (!NewDataReadyLeft);
 
-  if ((!statusLeft) && (NewDataReadyLeft != 0)) {
-    statusLeft = sensor_vl53l7cx_left.vl53l7cx_get_ranging_data(&Results);
-    compare_left_result(&Results);
+    if ((!statusLeft) && (NewDataReadyLeft != 0)) {
+      statusLeft = sensor_vl53l7cx_left.vl53l7cx_get_ranging_data(&Results);
+      compare_left_result(&Results);
+    }
   }
 
   // Check for incoming serial commands
