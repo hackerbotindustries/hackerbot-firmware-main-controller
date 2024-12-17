@@ -415,41 +415,23 @@ void setup() {
   //mySerCmd.AddCmd("MOTOR", SERIALCMD_FROMALL, Send_Motor);  
   //mySerCmd.AddCmd("GETML", SERIALCMD_FROMALL, Get_MapList);
 
-  // Initialize I2C bus.
+  // Initialize I2C bus
   I2C.begin();
 
-  mySerCmd.Print((char *) "I2C scanner. Scanning ...\r\n");
-  byte count = 0;
-  for (byte i = 1; i < 120; i++)
-  {
-    I2C.beginTransmission (i);
-    if (I2C.endTransmission () == 0)
-      {
-      mySerCmd.Print((char *) "Found address: ");
-      mySerCmd.Print(i);
-      mySerCmd.Print((char *) " (0x");
-      mySerCmd.Print(i);
-      mySerCmd.Print((char *) ")\r\n");
-      count++;
-      delay (1);  // maybe unneeded?
-      } // end of good response
-  } // end of for loop
-  mySerCmd.Print((char *) "Done.\r\n");
-  mySerCmd.Print((char *) "Found ");
-  mySerCmd.Print(count);
-  mySerCmd.Print((char *) " device(s).\r\n");
-
+  // Scan for I2C devices (prevents the application from locking up if an accessory is missing)
   I2C.beginTransmission(75);
-  if (I2C.endTransmission () == 0)
+  if (I2C.endTransmission () == 0) {
     mySerCmd.Print((char *) "STATUS: Temperature Sensor Attached\r\n");
+  }
+
   I2C.beginTransmission(41);
   if (I2C.endTransmission () == 0) {
     tofs_attached = 1;
     mySerCmd.Print((char *) "STATUS: Time of Flight Sensors Attached\r\n");
   }
   
+  // ToF Setup and Configuration (if attached)
   if (tofs_attached) {
-    // ToF Setup and Configuration
     mySerCmd.Print((char *) "INFO: Downloading sensor firmware and itializing settings...\r\n");
 
     // Configure VL53L7CX component.
@@ -503,8 +485,8 @@ void loop() {
   byte lenByte;
   int8_t ret;
   
+   // Read ToF sensor values and send a simulated bump command if an object is too close (only run if tof sensors are attached)
    if (tofs_attached) {
-    // ToF variables and commands
     VL53L7CX_ResultsData Results;
     uint8_t NewDataReadyRight = 0;
     uint8_t statusRight;
