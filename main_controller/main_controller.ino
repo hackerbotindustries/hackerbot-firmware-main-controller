@@ -1,7 +1,7 @@
 /*********************************************************************************
 Hackerbot Industries, LLC
 Created: April 2024
-Updated: 2024.11.11
+Updated: 2024.12.17
 
 This sketch is written for the "Main Controller" PCBA. It serves several funtions:
   1) Communicate with the SLAM Base Robot
@@ -16,6 +16,10 @@ This sketch is written for the "Main Controller" PCBA. It serves several funtion
 #include <Adafruit_NeoPixel.h>
 #include <vl53l7cx_class.h>
 
+// Main Controller Software Version
+#define VERSION_NUMBER 1.00
+
+// Serial Command Library Settings
 #define SERIALCMD_MAXCMDNUM 30    // Max number of commands
 #define SERIALCMD_MAXCMDLNG 12     // Max command name length
 #define SERIALCMD_MAXBUFFER 256    // Max buffer length
@@ -47,6 +51,16 @@ void sendOK(void) {
 // --------------- Functions for SerialCmd ---------------
 void Send_Ping(void) {
   mySerCmd.Print((char *) "INFO: Ping\r\n");
+  sendOK();
+}
+
+
+// Reports the versions of the boards connected to the Hackerbot
+// Example - "VERSION"
+void Get_Version(void) {
+  mySerCmd.Print((char *) "STATUS: Main Controller (v");
+  mySerCmd.Print(VERSION_NUMBER);
+  mySerCmd.Print((char *) ")\r\n");
   sendOK();
 }
 
@@ -407,6 +421,7 @@ void setup() {
 
   // Command Setup
   mySerCmd.AddCmd("PING", SERIALCMD_FROMALL, Send_Ping);
+  mySerCmd.AddCmd("VERSION", SERIALCMD_FROMALL, Get_Version);
   mySerCmd.AddCmd("INIT", SERIALCMD_FROMALL, Send_Handshake);
   mySerCmd.AddCmd("ENTER", SERIALCMD_FROMALL, Send_Enter);
   mySerCmd.AddCmd("GOTO", SERIALCMD_FROMALL, Send_Goto);
