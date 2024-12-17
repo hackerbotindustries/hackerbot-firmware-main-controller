@@ -35,6 +35,9 @@ void Send_Ping(void) {
   sendOK();
 }
 
+
+// Initializes the connection between the Arduino on the Main Controller with the SLAM vacuum base robot. This must be run once after a power cycle before any other commands can be sent
+// Example - "INIT"
 void Send_Handshake(void) {
   byte handshake1_frame[] = {
     0x55, 0xAA, // HEADER_HI, HEADER_LOW
@@ -64,6 +67,8 @@ void Send_Handshake(void) {
     String incomingHex = String(incomingByte, HEX);
     incomingHex.toUpperCase();
     content[i] = (byte)strtoul(incomingHex.c_str(), NULL, 16);
+    mySerCmd.Print(incomingHex);
+    mySerCmd.Print((char *) " ");
   }
 
   content[2] = 0x02;
@@ -80,6 +85,9 @@ void Send_Handshake(void) {
   sendOK();
 }
 
+
+// Gets a list of all of the maps stored on the robot
+// Example - "GETML"
 void Get_MapList(void) {
   byte get_map_list_frame[] = {
     0x55, 0xAA, // HEADER_HI, HEADER_LOW
@@ -101,115 +109,8 @@ void Get_MapList(void) {
 }
 
 
-// Get map command - GETMAP1
-// Example - "GETMAP1"
-void Get_Map1(void) {
-  byte get_map1_frame[] = {
-    0x55, 0xAA, // HEADER_HI, HEADER_LOW
-    0x02, // CTRL_ID
-    0x00, 0x06, // LEN_HI, LEN_LOW
-    0x21, // PACKET_ID
-    0x04, // PACKET_LEN
-    0x03, 0x00, 0x00, 0x00, // map_id
-    0x05, 0x30 // CRC_HI, CRC_LOW
-  };
-
-  mySerCmd.Print((char *) "Sending get_map1_frame\r\n");
-  Serial1.write(get_map1_frame, sizeof(get_map1_frame));
-
-  for(int i = 0; i < 8; i++) {
-    while(!Serial1.available());
-    byte incomingByte = Serial1.read();
-    String incomingHex = String(incomingByte, HEX);
-    incomingHex.toUpperCase();
-    mySerCmd.Print(incomingHex);
-    mySerCmd.Print((char *) " ");
-  }
-  mySerCmd.Print((char *) "\r\n");
-
-  mySerCmd.Print((char *) "Sending get_map2_frame\r\n");
-  Get_Map2();
-
-  for(int i = 0; i < 39; i++) {
-    while(!Serial1.available());
-    byte incomingByte = Serial1.read();
-    String incomingHex = String(incomingByte, HEX);
-    incomingHex.toUpperCase();
-    mySerCmd.Print(incomingHex);
-    mySerCmd.Print((char *) " ");
-  }
-  mySerCmd.Print((char *) "\r\n");
-
-  mySerCmd.Print((char *) "Sending get_map_frame\r\n");
-  Get_Map3();
-
-  for(int i = 0; i < 11; i++) {
-    while(!Serial1.available());
-    byte incomingByte = Serial1.read();
-    String incomingHex = String(incomingByte, HEX);
-    incomingHex.toUpperCase();
-    mySerCmd.Print(incomingHex);
-    mySerCmd.Print((char *) " ");
-  }
-  mySerCmd.Print((char *) "\r\n");
-
-  mySerCmd.Print((char *) "Sending get_map4_frame\r\n");
-  Get_Map4();
-
-  sendOK();
-}
-
-// Send CTRL_OTA_START_RESP packet - GETMAP2
-// Example - "GETMAP2"
-void Get_Map2(void) {
-  byte get_map2_frame[] = {
-    0x55, 0xAA, // HEADER_HI, HEADER_LOW
-    0x2F, // CTRL_ID_RESP
-    0x00, 0x17, // LEN_HI, LEN_LOW
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // no_use0
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // no_use1
-    0x00, 0x28, 0x00, 0x00, // file_limit
-    0x7F, 0x00, // packet_size
-    0x00, // no_use2
-    0x81, 0x74 // CRC_HI, CRC_LOW
-  };
-  Serial1.write(get_map2_frame, sizeof(get_map2_frame));
-
-  //sendOK();
-}
-
-// Send CTRL_OTA_FILE_INFO_RESP packet - GETMAP3
-// Example - "GETMAP3"
-void Get_Map3(void) {
-  byte get_map3_frame[] = {
-    0x55, 0xAA, // HEADER_HI, HEADER_LOW
-    0x30, // CTRL_ID_RESP
-    0x00, 0x09, // LEN_HI, LEN_LOW
-    0x00, // stat
-    0x00, 0x00, 0x00, 0x00, // last_offset
-    0x00, 0x00, 0x00, 0x00, // last_crc32
-    0x7C, 0xFE // CRC_HI, CRC_LOW
-  };
-  Serial1.write(get_map3_frame, sizeof(get_map3_frame));
-
-  //sendOK();
-}
-
-// Send CTRL_OTA_FILE_POS_RESP packet - GETMAP4
-// Example - "GETMAP4"
-void Get_Map4(void) {
-  byte get_map4_frame[] = {
-    0x55, 0xAA, // HEADER_HI, HEADER_LOW
-    0x31, // CTRL_ID_RESP
-    0x00, 0x04, // LEN_HI, LEN_LOW
-    0x00, 0x00, 0x00, 0x00, // last_offset
-    0x68, 0xEA // CRC_HI, CRC_LOW
-  };
-  Serial1.write(get_map4_frame, sizeof(get_map4_frame));
-
-  //sendOK();
-}
-
+// Set mode to enter. This moves the robot off the dock and starts the LiDAR
+// Example - "ENTER"
 void Send_Enter(void) {
   byte behavior_control_frame[] = {
     0x55, 0xAA, // HEADER_HI, HEADER_LOW
@@ -228,7 +129,8 @@ void Send_Enter(void) {
   sendOK();
 }
 
-// Go to pose command - GOTO
+
+// Go to pose command
 // Parameters
 // float: x, float: y, float: angle, float: speed
 // Example - "GOTO,0.5,0.5,0,10"
@@ -290,7 +192,7 @@ void Send_Goto(void) {
 }
 
 
-// Go to dock command - DOCK
+// Go to dock command
 // Example - "DOCK"
 void Send_Dock(void) {
   // Create the frame
@@ -329,7 +231,8 @@ void Send_Dock(void) {
   sendOK();
 }
 
-// Simulate bumper - BUMP
+
+// Simulated bumper command
 // Parameters
 // bool: left, bool: right
 // Example - "BUMP,1,0"
@@ -367,7 +270,8 @@ void Send_Bump(void) {
   sendOK();
 }
 
-// Wheel motor packet - MOTOR
+
+// Wheel motor packet
 // Parameters
 // int16_t: linear_velocity, int16_t: angular_velocity
 // Example - "MOTOR,1,0"
@@ -420,15 +324,12 @@ void setup() {
   // Command Setup
   mySerCmd.AddCmd("PING", SERIALCMD_FROMALL, Send_Ping);
   mySerCmd.AddCmd("INIT", SERIALCMD_FROMALL, Send_Handshake);
-  //mySerCmd.AddCmd("GETML", SERIALCMD_FROMALL, Get_MapList);
-  //mySerCmd.AddCmd("GETMAP1", SERIALCMD_FROMALL, Get_Map1);
-  //mySerCmd.AddCmd("GETMAP2", SERIALCMD_FROMALL, Get_Map2);
-  //mySerCmd.AddCmd("GETMAP3", SERIALCMD_FROMALL, Get_Map3);
-  //mySerCmd.AddCmd("GETMAP4", SERIALCMD_FROMALL, Get_Map4);
   mySerCmd.AddCmd("ENTER", SERIALCMD_FROMALL, Send_Enter);
   mySerCmd.AddCmd("GOTO", SERIALCMD_FROMALL, Send_Goto);
   mySerCmd.AddCmd("DOCK", SERIALCMD_FROMALL, Send_Dock);
-  mySerCmd.AddCmd("MOTOR", SERIALCMD_FROMALL, Send_Motor);
+  mySerCmd.AddCmd("BUMP", SERIALCMD_FROMALL, Send_Bump);
+  //mySerCmd.AddCmd("MOTOR", SERIALCMD_FROMALL, Send_Motor);  
+  //mySerCmd.AddCmd("GETML", SERIALCMD_FROMALL, Get_MapList);
 
   // Setup
   mySerCmd.Print((char *) "INFO: Starting application...\r\n");
@@ -449,7 +350,7 @@ void loop() {
     mySerCmd.Print((char *) "ERROR: Urecognized command.\r\n");
   }
 
-  // Check for data coming from the rc330b
+  // Check for data coming from the SLAM base robot
   if (Serial1.available()) {
     incomingByte = Serial1.read();
     incomingPacket[incomingPacketLen] = incomingByte;
