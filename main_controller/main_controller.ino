@@ -17,7 +17,7 @@ This sketch is written for the "Main Controller" PCBA. It serves several funtion
 #include <vl53l7cx_class.h>
 
 // Main Controller Software Version
-#define VERSION_NUMBER 1.00
+#define VERSION_NUMBER 1.01
 
 // Serial Command Library Settings
 #define SERIALCMD_MAXCMDNUM 30    // Max number of commands
@@ -443,6 +443,11 @@ void setup() {
   if (I2C.endTransmission () == 0) {
     tofs_attached = 1;
     mySerCmd.Print((char *) "STATUS: Time of Flight Sensors Attached\r\n");
+  }
+
+  I2C.beginTransmission(90);
+  if (I2C.endTransmission () == 0) {
+    mySerCmd.Print((char *) "STATUS: Hackerbot Head Attached\r\n");
   }
   
   // ToF Setup and Configuration (if attached)
