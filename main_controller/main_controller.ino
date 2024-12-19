@@ -416,7 +416,7 @@ void setup() {
   mySerCmd.Print((char *) "INFO: Initalizing application...\r\n");
 
   onboard_pixel.begin();
-  onboard_pixel.setPixelColor(0, onboard_pixel.Color(0, 0, 10));
+  onboard_pixel.setPixelColor(0, onboard_pixel.Color(0, 10, 0));
   onboard_pixel.show();
 
   // Command Setup
@@ -493,6 +493,8 @@ void setup() {
     sensor_vl53l7cx_left.vl53l7cx_start_ranging();
   }
 
+  onboard_pixel.setPixelColor(0, onboard_pixel.Color(0, 0, 10));
+  onboard_pixel.show();
   mySerCmd.Print((char *) "INFO: Starting application...\r\n");
 }
 
