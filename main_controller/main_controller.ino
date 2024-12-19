@@ -17,7 +17,7 @@ This sketch is written for the "Main Controller" PCBA. It serves several funtion
 #include <vl53l7cx_class.h>
 
 // Main Controller Software Version
-#define VERSION_NUMBER 1.01
+#define VERSION_NUMBER 1.02
 
 // Serial Command Library Settings
 #define SERIALCMD_MAXCMDNUM 30    // Max number of commands
