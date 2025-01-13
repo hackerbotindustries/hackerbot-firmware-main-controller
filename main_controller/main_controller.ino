@@ -1,7 +1,7 @@
 /*********************************************************************************
 Hackerbot Industries, LLC
 Created: April 2024
-Updated: 2024.12.17
+Updated: 2025.01.011
 
 This sketch is written for the "Main Controller" PCBA. It serves several funtions:
   1) Communicate with the SLAM Base Robot
@@ -16,30 +16,33 @@ This sketch is written for the "Main Controller" PCBA. It serves several funtion
 #include <Adafruit_NeoPixel.h>
 #include <vl53l7cx_class.h>
 
-// Main Controller Software Version
-#define VERSION_NUMBER 1.02
+// Main Controller software version
+#define VERSION_NUMBER 4
 
-// Serial Command Library Settings
-#define SERIALCMD_MAXCMDNUM 30    // Max number of commands
-#define SERIALCMD_MAXCMDLNG 12     // Max command name length
-#define SERIALCMD_MAXBUFFER 256    // Max buffer length
+// Set up the serial command processor
+SerialCmd mySerCmd(Serial);
 
-#define I2C Wire
-
-SerialCmd mySerCmd(Serial);       // Initialize the SerialCmd constructor using the "Serial" port
-
+// Onboard neopixel setup
 Adafruit_NeoPixel onboard_pixel(1, PIN_NEOPIXEL);
 
+// ToF Setup and variables
 void compare_left_result(VL53L7CX_ResultsData *Result);
 void compare_right_result(VL53L7CX_ResultsData *Result);
 
-VL53L7CX sensor_vl53l7cx_right(&I2C, 3); // LPn Enable Pin on D3
-VL53L7CX sensor_vl53l7cx_left(&I2C, 10); // Requires LPn to be set so using unused pin D10
+VL53L7CX sensor_vl53l7cx_right(&Wire, 3); // LPn Enable Pin on D3
+VL53L7CX sensor_vl53l7cx_left(&Wire, 10); // Requires LPn to be set so using unused pin D10
 char report[256];
 
 int tofs_attached = 0;
-int head_attached = 0;
+int head_ame_attached = 0;
+int head_dyn_attached = 0;
 int arm_attached = 0;
+
+// Other defines and variables
+byte RxByte;
+#define AME_I2C_ADDRESS 90          // Audio Mouth Eyes PCBA I2C address
+#define DYN_I2C_ADDRESS 91          // Dynamixel Controller I2C address
+#define ARM_I2C_ADDRESS 92          // Arm Controller I2C address
 
 
 // ------------------- User functions --------------------
@@ -50,7 +53,36 @@ void sendOK(void) {
 
 // --------------- Functions for SerialCmd ---------------
 void Send_Ping(void) {
-  mySerCmd.Print((char *) "INFO: Ping\r\n");
+  mySerCmd.Print((char *) "INFO: Main Controller           - ATTACHED\r\n");
+
+  Wire.beginTransmission(75);
+  if (Wire.endTransmission () == 0) {
+    mySerCmd.Print((char *) "INFO: Temperature Sensor        - ATTACHED\r\n");
+  }
+
+  Wire.beginTransmission(41);
+  if (Wire.endTransmission () == 0) {
+    tofs_attached = 1;
+    mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - ATTACHED\r\n");
+  }
+
+  Wire.beginTransmission(90); // Head Mouth Eyes PCBA
+  if (Wire.endTransmission () == 0) {
+    head_ame_attached = 1;
+    mySerCmd.Print((char *) "INFO: Audio/Mouth/Eyes PCBA     - ATTACHED\r\n");
+  }
+
+  Wire.beginTransmission(91); // Dynamixel Contoller PCBA
+  if (Wire.endTransmission () == 0) {
+    head_dyn_attached = 1;
+    mySerCmd.Print((char *) "INFO: Head Dynamixel Controller - ATTACHED\r\n");
+  }
+
+  Wire.beginTransmission(92); // Arm Controller PCBA
+  if (Wire.endTransmission () == 0) {
+    arm_attached = 1;
+    mySerCmd.Print((char *) "INFO: Arm Controller            - ATTACHED\r\n");
+  }
   sendOK();
 }
 
@@ -60,7 +92,35 @@ void Send_Ping(void) {
 void Get_Version(void) {
   mySerCmd.Print((char *) "STATUS: Main Controller (v");
   mySerCmd.Print(VERSION_NUMBER);
-  mySerCmd.Print((char *) ")\r\n");
+  mySerCmd.Print((char *) ".0)\r\n");
+  
+  if (head_ame_attached == 1) {
+    Wire.beginTransmission(AME_I2C_ADDRESS);
+    Wire.write(0x02);
+    Wire.endTransmission();
+    Wire.requestFrom(AME_I2C_ADDRESS, 1);
+    while(Wire.available()) {
+      RxByte = Wire.read();
+    }
+    mySerCmd.Print((char *) "STATUS: Audio Mouth Eyes (v");
+    mySerCmd.Print(RxByte);
+    mySerCmd.Print((char *) ".0)\r\n");
+  }
+
+  if (head_dyn_attached == 1) {
+    Wire.beginTransmission(DYN_I2C_ADDRESS);
+    Wire.write(0x02);
+    Wire.endTransmission();
+    // I2C RX
+    Wire.requestFrom(DYN_I2C_ADDRESS, 1);
+    while(Wire.available()) {
+      RxByte = Wire.read();
+    }
+    mySerCmd.Print((char *) "STATUS: Dynamixel Controller (v");
+    mySerCmd.Print(RxByte);
+    mySerCmd.Print((char *) ".0)\r\n");
+  }
+
   sendOK();
 }
 
@@ -340,6 +400,98 @@ void Send_Motor(void) {
 }
 
 
+// -------------------------------------------------------
+// Head Functions
+// -------------------------------------------------------
+void set_IDLE(void) {
+  char * sParam;
+  sParam = mySerCmd.ReadNext();
+
+  if (head_ame_attached == 0) {
+    mySerCmd.Print((char *) "ERROR: Dynamixel controller not attached\r\n");
+    return;
+  }
+ 
+  if (sParam == NULL) {
+    mySerCmd.Print((char *) "ERROR: Missing idle parameter\r\n");
+    return;
+  }
+
+  if (strtoul(sParam, NULL, 10) == 0) {
+    Wire.beginTransmission(DYN_I2C_ADDRESS);
+    Wire.write(0x08);
+    Wire.write(0x00);
+    Wire.endTransmission();
+    mySerCmd.Print((char *) "STATUS: Head idle mode disabled\r\n");
+  } else {
+    Wire.beginTransmission(DYN_I2C_ADDRESS);
+    Wire.write(0x08);
+    Wire.write(0x01);
+    Wire.endTransmission();
+    mySerCmd.Print((char *) "STATUS: Head idle mode enabled\r\n");
+  }
+
+  sendOK();
+}
+
+void set_LOOK(void) {
+  float turnParam = atof(mySerCmd.ReadNext());
+  float vertParam = atof(mySerCmd.ReadNext());
+  float speedParam = atof(mySerCmd.ReadNext());
+
+  if (head_ame_attached == 0) {
+    mySerCmd.Print((char *) "ERROR: Dynamixel controller not attached\r\n");
+    return;
+  }
+ 
+  if ((turnParam == NULL) || (vertParam == NULL) || (speedParam == NULL)) {
+    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    return;
+  }
+
+  if (turnParam < 100.0) {
+    turnParam = 100.0;
+  } else if (turnParam > 260.0) {
+    turnParam = 260.0;
+  }
+
+  if (vertParam < 150.0) {
+    vertParam = 150.0;
+  } else if (vertParam > 250.0) {
+    vertParam = 250.0;
+  }
+
+  if (speedParam < 6) {
+    speedParam = 6;
+  } else if (speedParam > 70) {
+    speedParam = 70;
+  }
+
+  mySerCmd.Print((char *) "STATUS: Looking to position turn: ");
+  mySerCmd.Print(turnParam);
+  mySerCmd.Print((char *) ", vert: ");
+  mySerCmd.Print(vertParam);
+  mySerCmd.Print((char *) ", at speed: ");
+  mySerCmd.Print((int)(speedParam));
+  mySerCmd.Print((char *) "\r\n");
+
+  uint16_t turnParam16 = (uint16_t)(turnParam * 10);
+  uint16_t vertParam16 = (uint16_t)(vertParam * 10);
+  uint8_t speedParam8 = (uint8_t)(speedParam);
+
+  Wire.beginTransmission(DYN_I2C_ADDRESS);
+  Wire.write(0x09);
+  Wire.write(highByte(turnParam16)); // Yaw H
+  Wire.write(lowByte(turnParam16)); // YAW L
+  Wire.write(highByte(vertParam16)); // Pitch H
+  Wire.write(lowByte(vertParam16)); // Pitch L
+  Wire.write(speedParam8);
+  Wire.endTransmission();
+
+  sendOK();
+}
+
+
 /* --------------------------------  Compare Left Result  -------------------------------*/
 void compare_left_result(VL53L7CX_ResultsData *Result) {
   int8_t i, j, k;
@@ -427,27 +579,44 @@ void setup() {
   mySerCmd.AddCmd("GOTO", SERIALCMD_FROMALL, Send_Goto);
   mySerCmd.AddCmd("DOCK", SERIALCMD_FROMALL, Send_Dock);
   mySerCmd.AddCmd("BUMP", SERIALCMD_FROMALL, Send_Bump);
-  //mySerCmd.AddCmd("MOTOR", SERIALCMD_FROMALL, Send_Motor);  
+  mySerCmd.AddCmd("MOTOR", SERIALCMD_FROMALL, Send_Motor);  
   //mySerCmd.AddCmd("GETML", SERIALCMD_FROMALL, Get_MapList);
 
+  // Head Commands
+  mySerCmd.AddCmd("IDLE", SERIALCMD_FROMALL, set_IDLE);
+  mySerCmd.AddCmd("LOOK", SERIALCMD_FROMALL, set_LOOK);
+
   // Initialize I2C bus
-  I2C.begin();
+  Wire.begin();
 
   // Scan for I2C devices (prevents the application from locking up if an accessory is missing)
-  I2C.beginTransmission(75);
-  if (I2C.endTransmission () == 0) {
+  Wire.beginTransmission(75);
+  if (Wire.endTransmission () == 0) {
     mySerCmd.Print((char *) "STATUS: Temperature Sensor Attached\r\n");
   }
 
-  I2C.beginTransmission(41);
-  if (I2C.endTransmission () == 0) {
+  Wire.beginTransmission(41);
+  if (Wire.endTransmission () == 0) {
     tofs_attached = 1;
     mySerCmd.Print((char *) "STATUS: Time of Flight Sensors Attached\r\n");
   }
 
-  I2C.beginTransmission(90);
-  if (I2C.endTransmission () == 0) {
-    mySerCmd.Print((char *) "STATUS: Hackerbot Head Attached\r\n");
+  Wire.beginTransmission(90); // Head Mouth Eyes PCBA
+  if (Wire.endTransmission () == 0) {
+    head_ame_attached = 1;
+    mySerCmd.Print((char *) "STATUS: Hackerbot Head Audio/Mouth/Eyes PCBA Attached\r\n");
+  }
+
+  Wire.beginTransmission(91); // Dynamixel Contoller PCBA
+  if (Wire.endTransmission () == 0) {
+    head_dyn_attached = 1;
+    mySerCmd.Print((char *) "STATUS: Hackerbot Head Dynamixel Controller Attached\r\n");
+  }
+
+  Wire.beginTransmission(92); // Arm Controller PCBA
+  if (Wire.endTransmission () == 0) {
+    arm_attached = 1;
+    mySerCmd.Print((char *) "STATUS: Hackerbot Arm Controller Attached\r\n");
   }
   
   // ToF Setup and Configuration (if attached)
@@ -537,7 +706,7 @@ void loop() {
   // Check for incoming serial commands
   ret = mySerCmd.ReadSer();
   if (ret == 0) {
-    mySerCmd.Print((char *) "ERROR: Urecognized command.\r\n");
+    mySerCmd.Print((char *) "ERROR: Urecognized command\r\n");
   }
 
   // Check for data coming from the SLAM base robot
