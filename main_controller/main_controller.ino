@@ -520,7 +520,7 @@ void run_CALIBRATION(void) {
 }
 
 // AOPEN
-void run_OPEN(void) {
+void set_OPEN(void) {
   mySerCmd.Print((char *) "INFO: Opening the gripper\r\n");
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
@@ -531,7 +531,7 @@ void run_OPEN(void) {
 }
 
 // ACLOSE
-void run_CLOSE(void) {
+void set_CLOSE(void) {
   mySerCmd.Print((char *) "INFO: Closing the gripper\r\n");
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
@@ -642,8 +642,6 @@ void set_ANGLES(void) {
     speedParam = 0;
   else if (speedParam > 100)
     speedParam = 100;
-
-  Angles angles = {joint1Param, joint2Param, joint3Param, joint4Param, joint5Param, joint6Param};
 
   mySerCmd.Print((char *) "STATUS: Setting the angle of the joints to (1) ");
   mySerCmd.Print(joint1Param);
