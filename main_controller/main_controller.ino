@@ -121,6 +121,22 @@ void Get_Version(void) {
     mySerCmd.Print((char *) ".0)\r\n");
   }
 
+  // NEW ARM CODE ADDED
+  if (arm_attached == 1) {
+    Wire.beginTransmission(ARM_I2C_ADDRESS);
+    Wire.write(0x02);
+    Wire.endTransmission();
+    // I2C RX
+    Wire.requestFrom(ARM_I2C_ADDRESS, 1);
+    while(Wire.available()) {
+      RxByte = Wire.read();
+    }
+    mySerCmd.Print((char *) "STATUS: Arm Controller (v");
+    mySerCmd.Print(RxByte);
+    mySerCmd.Print((char *) ".0)\r\n");
+  }
+  // END NEW ARM CODE ADDED
+
   sendOK();
 }
 
@@ -491,6 +507,189 @@ void set_LOOK(void) {
   sendOK();
 }
 
+// NEW ARM CODE ADDED
+// ACAL
+void run_CALIBRATION(void) {
+  mySerCmd.Print((char *) "INFO: Calibrating the gripper\r\n");
+
+  Wire.beginTransmission(ARM_I2C_ADDRESS);
+  Wire.write(0x20);
+  Wire.endTransmission();
+
+  sendOK();
+}
+
+// AOPEN
+void run_OPEN(void) {
+  mySerCmd.Print((char *) "INFO: Opening the gripper\r\n");
+
+  Wire.beginTransmission(ARM_I2C_ADDRESS);
+  Wire.write(0x21);
+  Wire.endTransmission();
+  
+  sendOK();
+}
+
+// ACLOSE
+void run_CLOSE(void) {
+  mySerCmd.Print((char *) "INFO: Closing the gripper\r\n");
+
+  Wire.beginTransmission(ARM_I2C_ADDRESS);
+  Wire.write(0x22);
+  Wire.endTransmission();
+  
+  sendOK();
+}
+
+// AANGLE
+void set_ANGLE(void) {
+  float jointParam = atof(mySerCmd.ReadNext());
+  float angleParam = atof(mySerCmd.ReadNext());
+  float speedParam = atof(mySerCmd.ReadNext());
+
+  if (speedParam == NULL) {
+    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    return;
+  }
+
+  if (jointParam < 0) {
+    jointParam = 0;
+  } else if (jointParam > 6) {
+    jointParam = 6;
+  }
+
+  if (angleParam < -165.0) {
+    angleParam = -165.0;
+  } else if (angleParam > 165.0) {
+    angleParam = 165.0;
+  }
+
+  if (speedParam < 0) {
+    speedParam = 0;
+  } else if (speedParam > 100) {
+    speedParam = 100;
+  }
+
+  mySerCmd.Print((char *) "STATUS: Setting the angle of joint ");
+  mySerCmd.Print((int)jointParam);
+  mySerCmd.Print((char *) " to ");
+  mySerCmd.Print(angleParam);
+  mySerCmd.Print((char *) " degrees at speed ");
+  mySerCmd.Print((int)speedParam);
+  mySerCmd.Print((char *) "\r\n");
+
+  uint8_t jointParam8 = (uint8_t)(jointParam);
+  uint16_t angleParam16 = (uint16_t)((angleParam + 165.0) * 10);
+  uint8_t speedParam8 = (uint8_t)(speedParam);
+
+  Wire.beginTransmission(ARM_I2C_ADDRESS);
+  Wire.write(0x25);
+  Wire.write(jointParam8);
+  Wire.write(highByte(angleParam16)); // Angle H
+  Wire.write(lowByte(angleParam16)); // Angle L
+  Wire.write(speedParam8);
+  Wire.endTransmission();
+
+  sendOK();
+}
+
+// AANGLES
+void set_ANGLES(void) {
+  float joint1Param = atof(mySerCmd.ReadNext());
+  float joint2Param = atof(mySerCmd.ReadNext());
+  float joint3Param = atof(mySerCmd.ReadNext());
+  float joint4Param = atof(mySerCmd.ReadNext());
+  float joint5Param = atof(mySerCmd.ReadNext());
+  float joint6Param = atof(mySerCmd.ReadNext());
+  float speedParam = atof(mySerCmd.ReadNext());
+
+  if (speedParam == NULL) {
+    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    return;
+  }
+
+  if (joint1Param < -165.0)
+    joint1Param = 165.0;
+  else if (joint1Param > 165.0)
+    joint1Param = 165.0;
+
+  if (joint2Param < -165.0)
+    joint2Param = 165.0;
+  else if (joint2Param > 165.0)
+    joint2Param = 165.0;
+
+  if (joint3Param < -165.0)
+    joint3Param = 165.0;
+  else if (joint3Param > 165.0)
+    joint3Param = 165.0;
+
+  if (joint4Param < -165.0)
+    joint4Param = 165.0;
+  else if (joint4Param > 165.0)
+    joint4Param = 165.0;
+
+  if (joint5Param < -165.0)
+    joint5Param = 165.0;
+  else if (joint5Param > 165.0)
+    joint5Param = 165.0;
+
+  if (joint6Param < -175.0)
+    joint6Param = 175.0;
+  else if (joint6Param > 175.0)
+    joint6Param = 175.0;
+
+  if (speedParam < 0)
+    speedParam = 0;
+  else if (speedParam > 100)
+    speedParam = 100;
+
+  Angles angles = {joint1Param, joint2Param, joint3Param, joint4Param, joint5Param, joint6Param};
+
+  mySerCmd.Print((char *) "STATUS: Setting the angle of the joints to (1) ");
+  mySerCmd.Print(joint1Param);
+  mySerCmd.Print((char *) ", (2) ");
+  mySerCmd.Print(joint2Param);
+  mySerCmd.Print((char *) ", (3) ");
+  mySerCmd.Print(joint3Param);
+  mySerCmd.Print((char *) ", (4) ");
+  mySerCmd.Print(joint4Param);
+  mySerCmd.Print((char *) ", (5) ");
+  mySerCmd.Print(joint5Param);
+  mySerCmd.Print((char *) ", (6) ");
+  mySerCmd.Print(joint6Param);
+  mySerCmd.Print((char *) " degrees at speed ");
+  mySerCmd.Print((int)speedParam);
+  mySerCmd.Print((char *) "\r\n");
+
+  uint16_t joint1Param16 = (uint16_t)((joint1Param + 165.0) * 10);
+  uint16_t joint2Param16 = (uint16_t)((joint2Param + 165.0) * 10);
+  uint16_t joint3Param16 = (uint16_t)((joint3Param + 165.0) * 10);
+  uint16_t joint4Param16 = (uint16_t)((joint4Param + 165.0) * 10);
+  uint16_t joint5Param16 = (uint16_t)((joint5Param + 165.0) * 10);
+  uint16_t joint6Param16 = (uint16_t)((joint6Param + 175.0) * 10);
+  uint8_t speedParam8 = (uint8_t)(speedParam);
+
+  Wire.beginTransmission(ARM_I2C_ADDRESS);
+  Wire.write(0x26);
+  Wire.write(highByte(joint1Param16)); // Joint 1 Angle H
+  Wire.write(lowByte(joint1Param16)); // Joint 1 Angle L
+  Wire.write(highByte(joint2Param16)); // Joint 2 Angle H
+  Wire.write(lowByte(joint2Param16)); // Joint 2 Angle L
+  Wire.write(highByte(joint3Param16)); // Joint 3 Angle H
+  Wire.write(lowByte(joint3Param16)); // Joint 3 Angle L
+  Wire.write(highByte(joint4Param16)); // Joint 4 Angle H
+  Wire.write(lowByte(joint4Param16)); // Joint 4 Angle L
+  Wire.write(highByte(joint5Param16)); // Joint 5 Angle H
+  Wire.write(lowByte(joint5Param16)); // Joint 5 Angle L
+  Wire.write(highByte(joint6Param16)); // Joint 6 Angle H
+  Wire.write(lowByte(joint6Param16)); // Joint 6 Angle L
+  Wire.write(speedParam8);
+  Wire.endTransmission();
+
+  sendOK();
+}
+// END ARM CODE ADDED
+
 
 /* --------------------------------  Compare Left Result  -------------------------------*/
 void compare_left_result(VL53L7CX_ResultsData *Result) {
@@ -583,8 +782,17 @@ void setup() {
   //mySerCmd.AddCmd("GETML", SERIALCMD_FROMALL, Get_MapList);
 
   // Head Commands
-  mySerCmd.AddCmd("IDLE", SERIALCMD_FROMALL, set_IDLE);
-  mySerCmd.AddCmd("LOOK", SERIALCMD_FROMALL, set_LOOK);
+  mySerCmd.AddCmd("HIDLE", SERIALCMD_FROMALL, set_IDLE);
+  mySerCmd.AddCmd("HLOOK", SERIALCMD_FROMALL, set_LOOK);
+
+  // NEW ARM CODE ADDED
+  // Arm Commands
+  mySerCmd.AddCmd("ACAL", SERIALCMD_FROMALL, run_CALIBRATION);
+  mySerCmd.AddCmd("AOPEN", SERIALCMD_FROMALL, set_OPEN);
+  mySerCmd.AddCmd("ACLOSE", SERIALCMD_FROMALL, set_CLOSE);
+  mySerCmd.AddCmd("AANGLE", SERIALCMD_FROMALL, set_ANGLE);
+  mySerCmd.AddCmd("AANGLES", SERIALCMD_FROMALL, set_ANGLES);
+  // END NEW ARM CODE ADDED
 
   // Initialize I2C bus
   Wire.begin();
