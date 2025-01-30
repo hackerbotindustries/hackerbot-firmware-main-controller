@@ -50,6 +50,7 @@ byte RxByte;
 #define I2C_COMMAND_VERSION 0x02
 #define I2C_COMMAND_HEAD_IDLE 0x08
 #define I2C_COMMAND_HEAD_LOOK 0x09
+#define I2C_COMMAND_FACE_GAZE 0x0A
 #define I2C_COMMAND_ARM_CALIBRATION 0x20
 #define I2C_COMMAND_ARM_OPEN 0x21
 #define I2C_COMMAND_ARM_CLOSE 0x22
@@ -518,6 +519,40 @@ void set_LOOK(void) {
   sendOK();
 }
 
+void set_GAZE(void) {
+  char* eyeTargetXStr = mySerCmd.ReadNext();
+  char* eyeTargetYStr = mySerCmd.ReadNext();
+
+  if (head_ame_attached == 0) {
+    mySerCmd.Print((char *) "ERROR: Audio/Mouth/Eyes controller not attached\r\n");
+    return;
+  }
+
+  if ((eyeTargetXStr == NULL) || (eyeTargetYStr == NULL)) {
+    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    return;
+  }
+
+  float eyeTargetXFloat = constrain(atof(eyeTargetXStr), -1.0, 1.0);
+  float eyeTargetYFloat = constrain(atof(eyeTargetYStr), -1.0, 1.0);
+
+  char buf[128] = {0};
+  sprintf(buf, "STATUS: Setting: eyeTargetX: %0.2f, eyeTargetY: %0.2f\r\n", eyeTargetXFloat, eyeTargetYFloat);
+  mySerCmd.Print(buf);
+
+  // scale to fit an int8 for smaller i2c transport
+  int8_t eyeTargetX = int8_t(eyeTargetXFloat * 100.0);
+  int8_t eyeTargetY = int8_t(eyeTargetYFloat * 100.0);
+
+  Wire.beginTransmission(AME_I2C_ADDRESS);
+  Wire.write(I2C_COMMAND_FACE_GAZE);
+  Wire.write((uint8_t)eyeTargetXInt8);
+  Wire.write((uint8_t)eyeTargetYInt8);
+  Wire.endTransmission();
+
+  sendOK();
+}
+
 // NEW ARM CODE ADDED
 // ACAL
 void run_CALIBRATION(void) {
@@ -699,7 +734,6 @@ void set_ANGLES(void) {
 }
 // END ARM CODE ADDED
 
-
 /* --------------------------------  Compare Left Result  -------------------------------*/
 void compare_left_result(VL53L7CX_ResultsData *Result) {
   int8_t i, j, k;
@@ -802,6 +836,9 @@ void setup() {
   mySerCmd.AddCmd("AANGLE", SERIALCMD_FROMALL, set_ANGLE);
   mySerCmd.AddCmd("AANGLES", SERIALCMD_FROMALL, set_ANGLES);
   // END NEW ARM CODE ADDED
+
+  // Face Commands
+  mySerCmd.AddCmd("FGAZE", SERIALCMD_FROMALL, set_GAZE);
 
   // Initialize I2C bus
   Wire.begin();
