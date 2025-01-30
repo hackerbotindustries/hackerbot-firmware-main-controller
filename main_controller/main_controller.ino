@@ -44,6 +44,17 @@ byte RxByte;
 #define DYN_I2C_ADDRESS 91          // Dynamixel Controller I2C address
 #define ARM_I2C_ADDRESS 92          // Arm Controller I2C address
 
+// I2C command addresses
+// FIXME: need this to be sharable between projects - decide between a common library, a shared include directory (perhaps every sub-fw #include's a file from fw_main_controller?), or some other scheme
+#define I2C_COMMAND_PING 0x01
+#define I2C_COMMAND_VERSION 0x02
+#define I2C_COMMAND_HEAD_IDLE 0x08
+#define I2C_COMMAND_HEAD_LOOK 0x09
+#define I2C_COMMAND_ARM_CALIBRATION 0x20
+#define I2C_COMMAND_ARM_OPEN 0x21
+#define I2C_COMMAND_ARM_CLOSE 0x22
+#define I2C_COMMAND_ARM_ANGLE 0x25
+#define I2C_COMMAND_ARM_ANGLES 0x26
 
 // ------------------- User functions --------------------
 void sendOK(void) {
@@ -96,7 +107,7 @@ void Get_Version(void) {
   
   if (head_ame_attached == 1) {
     Wire.beginTransmission(AME_I2C_ADDRESS);
-    Wire.write(0x02);
+    Wire.write(I2C_COMMAND_VERSION);
     Wire.endTransmission();
     Wire.requestFrom(AME_I2C_ADDRESS, 1);
     while(Wire.available()) {
@@ -109,7 +120,7 @@ void Get_Version(void) {
 
   if (head_dyn_attached == 1) {
     Wire.beginTransmission(DYN_I2C_ADDRESS);
-    Wire.write(0x02);
+    Wire.write(I2C_COMMAND_VERSION);
     Wire.endTransmission();
     // I2C RX
     Wire.requestFrom(DYN_I2C_ADDRESS, 1);
@@ -435,13 +446,13 @@ void set_IDLE(void) {
 
   if (strtoul(sParam, NULL, 10) == 0) {
     Wire.beginTransmission(DYN_I2C_ADDRESS);
-    Wire.write(0x08);
+    Wire.write(I2C_COMMAND_HEAD_IDLE);
     Wire.write(0x00);
     Wire.endTransmission();
     mySerCmd.Print((char *) "STATUS: Head idle mode disabled\r\n");
   } else {
     Wire.beginTransmission(DYN_I2C_ADDRESS);
-    Wire.write(0x08);
+    Wire.write(I2C_COMMAND_HEAD_IDLE);
     Wire.write(0x01);
     Wire.endTransmission();
     mySerCmd.Print((char *) "STATUS: Head idle mode enabled\r\n");
@@ -496,7 +507,7 @@ void set_LOOK(void) {
   uint8_t speedParam8 = (uint8_t)(speedParam);
 
   Wire.beginTransmission(DYN_I2C_ADDRESS);
-  Wire.write(0x09);
+  Wire.write(I2C_COMMAND_HEAD_LOOK);
   Wire.write(highByte(turnParam16)); // Yaw H
   Wire.write(lowByte(turnParam16)); // YAW L
   Wire.write(highByte(vertParam16)); // Pitch H
@@ -513,7 +524,7 @@ void run_CALIBRATION(void) {
   mySerCmd.Print((char *) "INFO: Calibrating the gripper\r\n");
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
-  Wire.write(0x20);
+  Wire.write(I2C_COMMAND_ARM_CALIBRATION);
   Wire.endTransmission();
 
   sendOK();
@@ -524,7 +535,7 @@ void set_OPEN(void) {
   mySerCmd.Print((char *) "INFO: Opening the gripper\r\n");
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
-  Wire.write(0x21);
+  Wire.write(I2C_COMMAND_ARM_OPEN);
   Wire.endTransmission();
   
   sendOK();
@@ -535,7 +546,7 @@ void set_CLOSE(void) {
   mySerCmd.Print((char *) "INFO: Closing the gripper\r\n");
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
-  Wire.write(0x22);
+  Wire.write(I2C_COMMAND_ARM_CLOSE);
   Wire.endTransmission();
   
   sendOK();
@@ -583,7 +594,7 @@ void set_ANGLE(void) {
   uint8_t speedParam8 = (uint8_t)(speedParam);
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
-  Wire.write(0x25);
+  Wire.write(I2C_COMMAND_ARM_ANGLE);
   Wire.write(jointParam8);
   Wire.write(highByte(angleParam16)); // Angle H
   Wire.write(lowByte(angleParam16)); // Angle L
@@ -668,7 +679,7 @@ void set_ANGLES(void) {
   uint8_t speedParam8 = (uint8_t)(speedParam);
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
-  Wire.write(0x26);
+  Wire.write(I2C_COMMAND_ARM_ANGLES);
   Wire.write(highByte(joint1Param16)); // Joint 1 Angle H
   Wire.write(lowByte(joint1Param16)); // Joint 1 Angle L
   Wire.write(highByte(joint2Param16)); // Joint 2 Angle H
