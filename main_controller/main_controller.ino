@@ -574,51 +574,36 @@ void set_CLOSE(void) {
 
 // AANGLE
 void set_ANGLE(void) {
-  float jointParam = atof(mySerCmd.ReadNext());
-  float angleParam = atof(mySerCmd.ReadNext());
-  float speedParam = atof(mySerCmd.ReadNext());
+  uint8_t jointParam = 0;
+  float angleParam = 0.0;
+  uint8_t speedParam = 0;
 
-  if (speedParam == NULL) {
+  if (!mySerCmd.ReadNextUInt8(&jointParam) ||
+      !mySerCmd.ReadNextFloat(&angleParam) ||
+      !mySerCmd.ReadNextUInt8(&speedParam)) {
     mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
-  if (jointParam < 0) {
-    jointParam = 0;
-  } else if (jointParam > 6) {
-    jointParam = 6;
-  }
+  // Constrain values to acceptable range
+  jointParam = constrain(jointParam, 0, 6);
+  // float limit = (jointParam < 6 ? 165.0 : 175.0); // fw_arm_controller doesn't differentiate today for this command
+  float limit = 165.0;
+  angleParam = constrain(angleParam, -1 * limit, limit);
+  speedParam = constrain(speedParam, 0, 100);
 
-  if (angleParam < -165.0) {
-    angleParam = -165.0;
-  } else if (angleParam > 165.0) {
-    angleParam = 165.0;
-  }
+  char buf[128] = {0};
+  sprintf(buf, "STATUS: Setting the angle of joint %d to %0.1f degrees at speed %d\r\n", jointParam, angleParam, speedParam);
+  mySerCmd.Print(buf);
 
-  if (speedParam < 0) {
-    speedParam = 0;
-  } else if (speedParam > 100) {
-    speedParam = 100;
-  }
-
-  mySerCmd.Print((char *) "STATUS: Setting the angle of joint ");
-  mySerCmd.Print((int)jointParam);
-  mySerCmd.Print((char *) " to ");
-  mySerCmd.Print(angleParam);
-  mySerCmd.Print((char *) " degrees at speed ");
-  mySerCmd.Print((int)speedParam);
-  mySerCmd.Print((char *) "\r\n");
-
-  uint8_t jointParam8 = (uint8_t)(jointParam);
-  uint16_t angleParam16 = (uint16_t)((angleParam + 165.0) * 10);
-  uint8_t speedParam8 = (uint8_t)(speedParam);
+  uint16_t angleParam16 = (uint16_t)((angleParam + limit) * 10);
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
   Wire.write(I2C_COMMAND_ARM_ANGLE);
-  Wire.write(jointParam8);
+  Wire.write(jointParam);
   Wire.write(highByte(angleParam16)); // Angle H
   Wire.write(lowByte(angleParam16)); // Angle L
-  Wire.write(speedParam8);
+  Wire.write(speedParam);
   Wire.endTransmission();
 
   sendOK();
@@ -626,93 +611,45 @@ void set_ANGLE(void) {
 
 // AANGLES
 void set_ANGLES(void) {
-  float joint1Param = atof(mySerCmd.ReadNext());
-  float joint2Param = atof(mySerCmd.ReadNext());
-  float joint3Param = atof(mySerCmd.ReadNext());
-  float joint4Param = atof(mySerCmd.ReadNext());
-  float joint5Param = atof(mySerCmd.ReadNext());
-  float joint6Param = atof(mySerCmd.ReadNext());
-  float speedParam = atof(mySerCmd.ReadNext());
+  float jointParam[6] = {0.0};
+  uint8_t speedParam = 0;
 
-  if (speedParam == NULL) {
+  if (!mySerCmd.ReadNextFloat(&jointParam[0]) ||
+      !mySerCmd.ReadNextFloat(&jointParam[1]) ||
+      !mySerCmd.ReadNextFloat(&jointParam[2]) ||
+      !mySerCmd.ReadNextFloat(&jointParam[3]) ||
+      !mySerCmd.ReadNextFloat(&jointParam[4]) ||
+      !mySerCmd.ReadNextFloat(&jointParam[5]) ||
+      !mySerCmd.ReadNextUInt8(&speedParam)) {
     mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
-  if (joint1Param < -165.0)
-    joint1Param = 165.0;
-  else if (joint1Param > 165.0)
-    joint1Param = 165.0;
+  // Constrain values to acceptable range
+  for (int ndx=0; ndx<6; ndx++) {
+    float limit = (ndx < 5 ? 165.0 : 175.0);
+    jointParam[ndx] = constrain(jointParam[ndx], -1 * limit, limit);
+  }
+  speedParam = constrain(speedParam, 0, 100);
 
-  if (joint2Param < -165.0)
-    joint2Param = 165.0;
-  else if (joint2Param > 165.0)
-    joint2Param = 165.0;
-
-  if (joint3Param < -165.0)
-    joint3Param = 165.0;
-  else if (joint3Param > 165.0)
-    joint3Param = 165.0;
-
-  if (joint4Param < -165.0)
-    joint4Param = 165.0;
-  else if (joint4Param > 165.0)
-    joint4Param = 165.0;
-
-  if (joint5Param < -165.0)
-    joint5Param = 165.0;
-  else if (joint5Param > 165.0)
-    joint5Param = 165.0;
-
-  if (joint6Param < -175.0)
-    joint6Param = 175.0;
-  else if (joint6Param > 175.0)
-    joint6Param = 175.0;
-
-  if (speedParam < 0)
-    speedParam = 0;
-  else if (speedParam > 100)
-    speedParam = 100;
-
-  mySerCmd.Print((char *) "STATUS: Setting the angle of the joints to (1) ");
-  mySerCmd.Print(joint1Param);
-  mySerCmd.Print((char *) ", (2) ");
-  mySerCmd.Print(joint2Param);
-  mySerCmd.Print((char *) ", (3) ");
-  mySerCmd.Print(joint3Param);
-  mySerCmd.Print((char *) ", (4) ");
-  mySerCmd.Print(joint4Param);
-  mySerCmd.Print((char *) ", (5) ");
-  mySerCmd.Print(joint5Param);
-  mySerCmd.Print((char *) ", (6) ");
-  mySerCmd.Print(joint6Param);
-  mySerCmd.Print((char *) " degrees at speed ");
-  mySerCmd.Print((int)speedParam);
-  mySerCmd.Print((char *) "\r\n");
-
-  uint16_t joint1Param16 = (uint16_t)((joint1Param + 165.0) * 10);
-  uint16_t joint2Param16 = (uint16_t)((joint2Param + 165.0) * 10);
-  uint16_t joint3Param16 = (uint16_t)((joint3Param + 165.0) * 10);
-  uint16_t joint4Param16 = (uint16_t)((joint4Param + 165.0) * 10);
-  uint16_t joint5Param16 = (uint16_t)((joint5Param + 165.0) * 10);
-  uint16_t joint6Param16 = (uint16_t)((joint6Param + 175.0) * 10);
-  uint8_t speedParam8 = (uint8_t)(speedParam);
+  char buf[160] = {0};
+  char *pos=buf;
+  pos += sprintf(pos, "STATUS: Setting the angle of the joints to");
+  for (int ndx=0; ndx<6; ndx++) {
+    pos += sprintf(pos, " (%d) %.1f%s", ndx+1, jointParam[ndx], (ndx < 5 ? "," : ""));
+  }
+  sprintf(pos, " degrees at speed %d\r\n", speedParam);
+  mySerCmd.Print(buf);
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
   Wire.write(I2C_COMMAND_ARM_ANGLES);
-  Wire.write(highByte(joint1Param16)); // Joint 1 Angle H
-  Wire.write(lowByte(joint1Param16)); // Joint 1 Angle L
-  Wire.write(highByte(joint2Param16)); // Joint 2 Angle H
-  Wire.write(lowByte(joint2Param16)); // Joint 2 Angle L
-  Wire.write(highByte(joint3Param16)); // Joint 3 Angle H
-  Wire.write(lowByte(joint3Param16)); // Joint 3 Angle L
-  Wire.write(highByte(joint4Param16)); // Joint 4 Angle H
-  Wire.write(lowByte(joint4Param16)); // Joint 4 Angle L
-  Wire.write(highByte(joint5Param16)); // Joint 5 Angle H
-  Wire.write(lowByte(joint5Param16)); // Joint 5 Angle L
-  Wire.write(highByte(joint6Param16)); // Joint 6 Angle H
-  Wire.write(lowByte(joint6Param16)); // Joint 6 Angle L
-  Wire.write(speedParam8);
+  for (int ndx=0; ndx<6; ndx++) {
+    float limit = (ndx < 5 ? 165.0 : 175.0);
+    uint16_t jointParam16 = (uint16_t)((jointParam[ndx] + limit) * 10);
+    Wire.write(highByte(jointParam16)); // Joint Angle H
+    Wire.write(lowByte(jointParam16)); // Joint Angle L
+  }
+  Wire.write(speedParam);
   Wire.endTransmission();
 
   sendOK();
