@@ -15,12 +15,13 @@ This sketch is written for the "Main Controller" PCBA. It serves several funtion
 #include <Wire.h>
 #include <Adafruit_NeoPixel.h>
 #include <vl53l7cx_class.h>
+#include "HackerbotSerialCmd.h"
 
 // Main Controller software version
 #define VERSION_NUMBER 4
 
 // Set up the serial command processor
-SerialCmd mySerCmd(Serial);
+HackerbotSerialCmd mySerCmd(Serial);
 
 // Onboard neopixel setup
 Adafruit_NeoPixel onboard_pixel(1, PIN_NEOPIXEL);
@@ -463,45 +464,28 @@ void set_IDLE(void) {
 }
 
 void set_LOOK(void) {
-  float turnParam = atof(mySerCmd.ReadNext());
-  float vertParam = atof(mySerCmd.ReadNext());
-  float speedParam = atof(mySerCmd.ReadNext());
+  float turnParam = 0.0;
+  float vertParam = 0.0;
+  uint8_t speedParam = 0;
 
   if (head_ame_attached == 0) {
     mySerCmd.Print((char *) "ERROR: Dynamixel controller not attached\r\n");
     return;
   }
  
-  if ((turnParam == NULL) || (vertParam == NULL) || (speedParam == NULL)) {
+  if (!mySerCmd.ReadNextFloat(&turnParam) || !mySerCmd.ReadNextFloat(&vertParam) || !mySerCmd.ReadNextUInt8(&speedParam)) {
     mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
-  if (turnParam < 100.0) {
-    turnParam = 100.0;
-  } else if (turnParam > 260.0) {
-    turnParam = 260.0;
-  }
+  // Constrain values to acceptable range
+  turnParam = constrain(turnParam, 100.0, 260.0);
+  vertParam = constrain(vertParam, 150.0, 250.0);
+  speedParam = constrain(speedParam, 6, 70);
 
-  if (vertParam < 150.0) {
-    vertParam = 150.0;
-  } else if (vertParam > 250.0) {
-    vertParam = 250.0;
-  }
-
-  if (speedParam < 6) {
-    speedParam = 6;
-  } else if (speedParam > 70) {
-    speedParam = 70;
-  }
-
-  mySerCmd.Print((char *) "STATUS: Looking to position turn: ");
-  mySerCmd.Print(turnParam);
-  mySerCmd.Print((char *) ", vert: ");
-  mySerCmd.Print(vertParam);
-  mySerCmd.Print((char *) ", at speed: ");
-  mySerCmd.Print((int)(speedParam));
-  mySerCmd.Print((char *) "\r\n");
+  char buf[128] = {0};
+  sprintf(buf, "STATUS: Looking to position turn: %0.2f, vert: %0.2f, at speed: %d\r\n", turnParam, vertParam, speedParam);
+  mySerCmd.Print(buf);
 
   uint16_t turnParam16 = (uint16_t)(turnParam * 10);
   uint16_t vertParam16 = (uint16_t)(vertParam * 10);
@@ -520,29 +504,30 @@ void set_LOOK(void) {
 }
 
 void set_GAZE(void) {
-  char* eyeTargetXStr = mySerCmd.ReadNext();
-  char* eyeTargetYStr = mySerCmd.ReadNext();
+  float eyeTargetX = 0.0;
+  float eyeTargetY = 0.0;
 
   if (head_ame_attached == 0) {
     mySerCmd.Print((char *) "ERROR: Audio/Mouth/Eyes controller not attached\r\n");
     return;
   }
 
-  if ((eyeTargetXStr == NULL) || (eyeTargetYStr == NULL)) {
+  if (!mySerCmd.ReadNextFloat(&eyeTargetX) || !mySerCmd.ReadNextFloat(&eyeTargetY)) {
     mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
-  float eyeTargetXFloat = constrain(atof(eyeTargetXStr), -1.0, 1.0);
-  float eyeTargetYFloat = constrain(atof(eyeTargetYStr), -1.0, 1.0);
+  // Constrain values to acceptable range
+  eyeTargetX = constrain(eyeTargetX, -1.0, 1.0);
+  eyeTargetY = constrain(eyeTargetY, -1.0, 1.0);
 
   char buf[128] = {0};
-  sprintf(buf, "STATUS: Setting: eyeTargetX: %0.2f, eyeTargetY: %0.2f\r\n", eyeTargetXFloat, eyeTargetYFloat);
+  sprintf(buf, "STATUS: Setting: eyeTargetX: %0.2f, eyeTargetY: %0.2f\r\n", eyeTargetX, eyeTargetY);
   mySerCmd.Print(buf);
 
   // scale to fit an int8 for smaller i2c transport
-  int8_t eyeTargetX = int8_t(eyeTargetXFloat * 100.0);
-  int8_t eyeTargetY = int8_t(eyeTargetYFloat * 100.0);
+  int8_t eyeTargetXInt8 = int8_t(eyeTargetX * 100.0);
+  int8_t eyeTargetYInt8 = int8_t(eyeTargetY * 100.0);
 
   Wire.beginTransmission(AME_I2C_ADDRESS);
   Wire.write(I2C_COMMAND_FACE_GAZE);
