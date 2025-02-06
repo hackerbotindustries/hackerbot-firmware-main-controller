@@ -41,9 +41,9 @@ int arm_attached = 0;
 
 // Other defines and variables
 byte RxByte;
-#define AME_I2C_ADDRESS 90          // Audio Mouth Eyes PCBA I2C address
-#define DYN_I2C_ADDRESS 91          // Dynamixel Controller I2C address
-#define ARM_I2C_ADDRESS 92          // Arm Controller I2C address
+#define AME_I2C_ADDRESS 0x5A              // Audio Mouth Eyes PCBA I2C address
+#define DYN_I2C_ADDRESS 0x5B              // Dynamixel Controller I2C address
+#define ARM_I2C_ADDRESS 0x5C              // Arm Controller I2C address
 
 // I2C command addresses
 // FIXME: need this to be sharable between projects - decide between a common library, a shared include directory (perhaps every sub-fw #include's a file from fw_main_controller?), or some other scheme
@@ -79,19 +79,19 @@ void Send_Ping(void) {
     mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - ATTACHED\r\n");
   }
 
-  Wire.beginTransmission(90); // Head Mouth Eyes PCBA
+  Wire.beginTransmission(AME_I2C_ADDRESS); // Head Mouth Eyes PCBA
   if (Wire.endTransmission () == 0) {
     head_ame_attached = 1;
     mySerCmd.Print((char *) "INFO: Audio/Mouth/Eyes PCBA     - ATTACHED\r\n");
   }
 
-  Wire.beginTransmission(91); // Dynamixel Contoller PCBA
+  Wire.beginTransmission(DYN_I2C_ADDRESS); // Dynamixel Contoller PCBA
   if (Wire.endTransmission () == 0) {
     head_dyn_attached = 1;
     mySerCmd.Print((char *) "INFO: Head Dynamixel Controller - ATTACHED\r\n");
   }
 
-  Wire.beginTransmission(92); // Arm Controller PCBA
+  Wire.beginTransmission(ARM_I2C_ADDRESS); // Arm Controller PCBA
   if (Wire.endTransmission () == 0) {
     arm_attached = 1;
     mySerCmd.Print((char *) "INFO: Arm Controller            - ATTACHED\r\n");
@@ -777,19 +777,19 @@ void setup() {
     mySerCmd.Print((char *) "STATUS: Time of Flight Sensors Attached\r\n");
   }
 
-  Wire.beginTransmission(90); // Head Mouth Eyes PCBA
+  Wire.beginTransmission(AME_I2C_ADDRESS); // Head Mouth Eyes PCBA
   if (Wire.endTransmission () == 0) {
     head_ame_attached = 1;
     mySerCmd.Print((char *) "STATUS: Hackerbot Head Audio/Mouth/Eyes PCBA Attached\r\n");
   }
 
-  Wire.beginTransmission(91); // Dynamixel Contoller PCBA
+  Wire.beginTransmission(DYN_I2C_ADDRESS); // Dynamixel Contoller PCBA
   if (Wire.endTransmission () == 0) {
     head_dyn_attached = 1;
     mySerCmd.Print((char *) "STATUS: Hackerbot Head Dynamixel Controller Attached\r\n");
   }
 
-  Wire.beginTransmission(92); // Arm Controller PCBA
+  Wire.beginTransmission(ARM_I2C_ADDRESS); // Arm Controller PCBA
   if (Wire.endTransmission () == 0) {
     arm_attached = 1;
     mySerCmd.Print((char *) "STATUS: Hackerbot Arm Controller Attached\r\n");
