@@ -22,12 +22,11 @@ enum tofs_state_t {
   TOFS_STATE_READY = 4
 };
 
-const char* STRING_FOR_TOFS_STATE(tofs_state_t state);
-
 extern tofs_state_t tofs_left_state;
 extern tofs_state_t tofs_right_state;
 
-// ToF Setup and variables
+const char* STRING_FOR_TOFS_STATE(tofs_state_t state);
+
 void tofs_setup();
 
 bool check_left_sensor();
