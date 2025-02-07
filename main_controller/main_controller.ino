@@ -15,12 +15,13 @@ This sketch is written for the "Main Controller" PCBA. It serves several funtion
 #include <Wire.h>
 #include <Adafruit_NeoPixel.h>
 #include <vl53l7cx_class.h>
+#include "HackerbotSerialCmd.h"
 
 // Main Controller software version
 #define VERSION_NUMBER 4
 
 // Set up the serial command processor
-SerialCmd mySerCmd(Serial);
+HackerbotSerialCmd mySerCmd(Serial);
 
 // Onboard neopixel setup
 Adafruit_NeoPixel onboard_pixel(1, PIN_NEOPIXEL);
@@ -44,6 +45,18 @@ byte RxByte;
 #define DYN_I2C_ADDRESS 91          // Dynamixel Controller I2C address
 #define ARM_I2C_ADDRESS 92          // Arm Controller I2C address
 
+// I2C command addresses
+// FIXME: need this to be sharable between projects - decide between a common library, a shared include directory (perhaps every sub-fw #include's a file from fw_main_controller?), or some other scheme
+#define I2C_COMMAND_PING 0x01
+#define I2C_COMMAND_VERSION 0x02
+#define I2C_COMMAND_HEAD_IDLE 0x08
+#define I2C_COMMAND_HEAD_LOOK 0x09
+#define I2C_COMMAND_FACE_GAZE 0x0A
+#define I2C_COMMAND_ARM_CALIBRATION 0x20
+#define I2C_COMMAND_ARM_OPEN 0x21
+#define I2C_COMMAND_ARM_CLOSE 0x22
+#define I2C_COMMAND_ARM_ANGLE 0x25
+#define I2C_COMMAND_ARM_ANGLES 0x26
 
 // ------------------- User functions --------------------
 void sendOK(void) {
@@ -96,7 +109,7 @@ void Get_Version(void) {
   
   if (head_ame_attached == 1) {
     Wire.beginTransmission(AME_I2C_ADDRESS);
-    Wire.write(0x02);
+    Wire.write(I2C_COMMAND_VERSION);
     Wire.endTransmission();
     Wire.requestFrom(AME_I2C_ADDRESS, 1);
     while(Wire.available()) {
@@ -109,7 +122,7 @@ void Get_Version(void) {
 
   if (head_dyn_attached == 1) {
     Wire.beginTransmission(DYN_I2C_ADDRESS);
-    Wire.write(0x02);
+    Wire.write(I2C_COMMAND_VERSION);
     Wire.endTransmission();
     // I2C RX
     Wire.requestFrom(DYN_I2C_ADDRESS, 1);
@@ -435,13 +448,13 @@ void set_IDLE(void) {
 
   if (strtoul(sParam, NULL, 10) == 0) {
     Wire.beginTransmission(DYN_I2C_ADDRESS);
-    Wire.write(0x08);
+    Wire.write(I2C_COMMAND_HEAD_IDLE);
     Wire.write(0x00);
     Wire.endTransmission();
     mySerCmd.Print((char *) "STATUS: Head idle mode disabled\r\n");
   } else {
     Wire.beginTransmission(DYN_I2C_ADDRESS);
-    Wire.write(0x08);
+    Wire.write(I2C_COMMAND_HEAD_IDLE);
     Wire.write(0x01);
     Wire.endTransmission();
     mySerCmd.Print((char *) "STATUS: Head idle mode enabled\r\n");
@@ -451,57 +464,75 @@ void set_IDLE(void) {
 }
 
 void set_LOOK(void) {
-  float turnParam = atof(mySerCmd.ReadNext());
-  float vertParam = atof(mySerCmd.ReadNext());
-  float speedParam = atof(mySerCmd.ReadNext());
+  float turnParam = 0.0;
+  float vertParam = 0.0;
+  uint8_t speedParam = 0;
 
   if (head_ame_attached == 0) {
     mySerCmd.Print((char *) "ERROR: Dynamixel controller not attached\r\n");
     return;
   }
  
-  if ((turnParam == NULL) || (vertParam == NULL) || (speedParam == NULL)) {
+  if (!mySerCmd.ReadNextFloat(&turnParam) || !mySerCmd.ReadNextFloat(&vertParam) || !mySerCmd.ReadNextUInt8(&speedParam)) {
     mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
-  if (turnParam < 100.0) {
-    turnParam = 100.0;
-  } else if (turnParam > 260.0) {
-    turnParam = 260.0;
-  }
+  // Constrain values to acceptable range
+  turnParam = constrain(turnParam, 100.0, 260.0);
+  vertParam = constrain(vertParam, 150.0, 250.0);
+  speedParam = constrain(speedParam, 6, 70);
 
-  if (vertParam < 150.0) {
-    vertParam = 150.0;
-  } else if (vertParam > 250.0) {
-    vertParam = 250.0;
-  }
-
-  if (speedParam < 6) {
-    speedParam = 6;
-  } else if (speedParam > 70) {
-    speedParam = 70;
-  }
-
-  mySerCmd.Print((char *) "STATUS: Looking to position turn: ");
-  mySerCmd.Print(turnParam);
-  mySerCmd.Print((char *) ", vert: ");
-  mySerCmd.Print(vertParam);
-  mySerCmd.Print((char *) ", at speed: ");
-  mySerCmd.Print((int)(speedParam));
-  mySerCmd.Print((char *) "\r\n");
+  char buf[128] = {0};
+  sprintf(buf, "STATUS: Looking to position turn: %0.2f, vert: %0.2f, at speed: %d\r\n", turnParam, vertParam, speedParam);
+  mySerCmd.Print(buf);
 
   uint16_t turnParam16 = (uint16_t)(turnParam * 10);
   uint16_t vertParam16 = (uint16_t)(vertParam * 10);
   uint8_t speedParam8 = (uint8_t)(speedParam);
 
   Wire.beginTransmission(DYN_I2C_ADDRESS);
-  Wire.write(0x09);
+  Wire.write(I2C_COMMAND_HEAD_LOOK);
   Wire.write(highByte(turnParam16)); // Yaw H
   Wire.write(lowByte(turnParam16)); // YAW L
   Wire.write(highByte(vertParam16)); // Pitch H
   Wire.write(lowByte(vertParam16)); // Pitch L
   Wire.write(speedParam8);
+  Wire.endTransmission();
+
+  sendOK();
+}
+
+void set_GAZE(void) {
+  float eyeTargetX = 0.0;
+  float eyeTargetY = 0.0;
+
+  if (head_ame_attached == 0) {
+    mySerCmd.Print((char *) "ERROR: Audio/Mouth/Eyes controller not attached\r\n");
+    return;
+  }
+
+  if (!mySerCmd.ReadNextFloat(&eyeTargetX) || !mySerCmd.ReadNextFloat(&eyeTargetY)) {
+    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    return;
+  }
+
+  // Constrain values to acceptable range
+  eyeTargetX = constrain(eyeTargetX, -1.0, 1.0);
+  eyeTargetY = constrain(eyeTargetY, -1.0, 1.0);
+
+  char buf[128] = {0};
+  sprintf(buf, "STATUS: Setting: eyeTargetX: %0.2f, eyeTargetY: %0.2f\r\n", eyeTargetX, eyeTargetY);
+  mySerCmd.Print(buf);
+
+  // scale to fit an int8 for smaller i2c transport
+  int8_t eyeTargetXInt8 = int8_t(eyeTargetX * 100.0);
+  int8_t eyeTargetYInt8 = int8_t(eyeTargetY * 100.0);
+
+  Wire.beginTransmission(AME_I2C_ADDRESS);
+  Wire.write(I2C_COMMAND_FACE_GAZE);
+  Wire.write((uint8_t)eyeTargetXInt8);
+  Wire.write((uint8_t)eyeTargetYInt8);
   Wire.endTransmission();
 
   sendOK();
@@ -513,7 +544,7 @@ void run_CALIBRATION(void) {
   mySerCmd.Print((char *) "INFO: Calibrating the gripper\r\n");
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
-  Wire.write(0x20);
+  Wire.write(I2C_COMMAND_ARM_CALIBRATION);
   Wire.endTransmission();
 
   sendOK();
@@ -524,7 +555,7 @@ void set_OPEN(void) {
   mySerCmd.Print((char *) "INFO: Opening the gripper\r\n");
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
-  Wire.write(0x21);
+  Wire.write(I2C_COMMAND_ARM_OPEN);
   Wire.endTransmission();
   
   sendOK();
@@ -535,7 +566,7 @@ void set_CLOSE(void) {
   mySerCmd.Print((char *) "INFO: Closing the gripper\r\n");
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
-  Wire.write(0x22);
+  Wire.write(I2C_COMMAND_ARM_CLOSE);
   Wire.endTransmission();
   
   sendOK();
@@ -543,51 +574,36 @@ void set_CLOSE(void) {
 
 // AANGLE
 void set_ANGLE(void) {
-  float jointParam = atof(mySerCmd.ReadNext());
-  float angleParam = atof(mySerCmd.ReadNext());
-  float speedParam = atof(mySerCmd.ReadNext());
+  uint8_t jointParam = 0;
+  float angleParam = 0.0;
+  uint8_t speedParam = 0;
 
-  if (speedParam == NULL) {
+  if (!mySerCmd.ReadNextUInt8(&jointParam) ||
+      !mySerCmd.ReadNextFloat(&angleParam) ||
+      !mySerCmd.ReadNextUInt8(&speedParam)) {
     mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
-  if (jointParam < 0) {
-    jointParam = 0;
-  } else if (jointParam > 6) {
-    jointParam = 6;
-  }
+  // Constrain values to acceptable range
+  jointParam = constrain(jointParam, 0, 6);
+  // float limit = (jointParam < 6 ? 165.0 : 175.0); // fw_arm_controller doesn't differentiate today for this command
+  float limit = 165.0;
+  angleParam = constrain(angleParam, -1 * limit, limit);
+  speedParam = constrain(speedParam, 0, 100);
 
-  if (angleParam < -165.0) {
-    angleParam = -165.0;
-  } else if (angleParam > 165.0) {
-    angleParam = 165.0;
-  }
+  char buf[128] = {0};
+  sprintf(buf, "STATUS: Setting the angle of joint %d to %0.1f degrees at speed %d\r\n", jointParam, angleParam, speedParam);
+  mySerCmd.Print(buf);
 
-  if (speedParam < 0) {
-    speedParam = 0;
-  } else if (speedParam > 100) {
-    speedParam = 100;
-  }
-
-  mySerCmd.Print((char *) "STATUS: Setting the angle of joint ");
-  mySerCmd.Print((int)jointParam);
-  mySerCmd.Print((char *) " to ");
-  mySerCmd.Print(angleParam);
-  mySerCmd.Print((char *) " degrees at speed ");
-  mySerCmd.Print((int)speedParam);
-  mySerCmd.Print((char *) "\r\n");
-
-  uint8_t jointParam8 = (uint8_t)(jointParam);
-  uint16_t angleParam16 = (uint16_t)((angleParam + 165.0) * 10);
-  uint8_t speedParam8 = (uint8_t)(speedParam);
+  uint16_t angleParam16 = (uint16_t)((angleParam + limit) * 10);
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
-  Wire.write(0x25);
-  Wire.write(jointParam8);
+  Wire.write(I2C_COMMAND_ARM_ANGLE);
+  Wire.write(jointParam);
   Wire.write(highByte(angleParam16)); // Angle H
   Wire.write(lowByte(angleParam16)); // Angle L
-  Wire.write(speedParam8);
+  Wire.write(speedParam);
   Wire.endTransmission();
 
   sendOK();
@@ -595,99 +611,50 @@ void set_ANGLE(void) {
 
 // AANGLES
 void set_ANGLES(void) {
-  float joint1Param = atof(mySerCmd.ReadNext());
-  float joint2Param = atof(mySerCmd.ReadNext());
-  float joint3Param = atof(mySerCmd.ReadNext());
-  float joint4Param = atof(mySerCmd.ReadNext());
-  float joint5Param = atof(mySerCmd.ReadNext());
-  float joint6Param = atof(mySerCmd.ReadNext());
-  float speedParam = atof(mySerCmd.ReadNext());
+  float jointParam[6] = {0.0};
+  uint8_t speedParam = 0;
 
-  if (speedParam == NULL) {
+  if (!mySerCmd.ReadNextFloat(&jointParam[0]) ||
+      !mySerCmd.ReadNextFloat(&jointParam[1]) ||
+      !mySerCmd.ReadNextFloat(&jointParam[2]) ||
+      !mySerCmd.ReadNextFloat(&jointParam[3]) ||
+      !mySerCmd.ReadNextFloat(&jointParam[4]) ||
+      !mySerCmd.ReadNextFloat(&jointParam[5]) ||
+      !mySerCmd.ReadNextUInt8(&speedParam)) {
     mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
-  if (joint1Param < -165.0)
-    joint1Param = 165.0;
-  else if (joint1Param > 165.0)
-    joint1Param = 165.0;
+  // Constrain values to acceptable range
+  for (int ndx=0; ndx<6; ndx++) {
+    float limit = (ndx < 5 ? 165.0 : 175.0);
+    jointParam[ndx] = constrain(jointParam[ndx], -1 * limit, limit);
+  }
+  speedParam = constrain(speedParam, 0, 100);
 
-  if (joint2Param < -165.0)
-    joint2Param = 165.0;
-  else if (joint2Param > 165.0)
-    joint2Param = 165.0;
-
-  if (joint3Param < -165.0)
-    joint3Param = 165.0;
-  else if (joint3Param > 165.0)
-    joint3Param = 165.0;
-
-  if (joint4Param < -165.0)
-    joint4Param = 165.0;
-  else if (joint4Param > 165.0)
-    joint4Param = 165.0;
-
-  if (joint5Param < -165.0)
-    joint5Param = 165.0;
-  else if (joint5Param > 165.0)
-    joint5Param = 165.0;
-
-  if (joint6Param < -175.0)
-    joint6Param = 175.0;
-  else if (joint6Param > 175.0)
-    joint6Param = 175.0;
-
-  if (speedParam < 0)
-    speedParam = 0;
-  else if (speedParam > 100)
-    speedParam = 100;
-
-  mySerCmd.Print((char *) "STATUS: Setting the angle of the joints to (1) ");
-  mySerCmd.Print(joint1Param);
-  mySerCmd.Print((char *) ", (2) ");
-  mySerCmd.Print(joint2Param);
-  mySerCmd.Print((char *) ", (3) ");
-  mySerCmd.Print(joint3Param);
-  mySerCmd.Print((char *) ", (4) ");
-  mySerCmd.Print(joint4Param);
-  mySerCmd.Print((char *) ", (5) ");
-  mySerCmd.Print(joint5Param);
-  mySerCmd.Print((char *) ", (6) ");
-  mySerCmd.Print(joint6Param);
-  mySerCmd.Print((char *) " degrees at speed ");
-  mySerCmd.Print((int)speedParam);
-  mySerCmd.Print((char *) "\r\n");
-
-  uint16_t joint1Param16 = (uint16_t)((joint1Param + 165.0) * 10);
-  uint16_t joint2Param16 = (uint16_t)((joint2Param + 165.0) * 10);
-  uint16_t joint3Param16 = (uint16_t)((joint3Param + 165.0) * 10);
-  uint16_t joint4Param16 = (uint16_t)((joint4Param + 165.0) * 10);
-  uint16_t joint5Param16 = (uint16_t)((joint5Param + 165.0) * 10);
-  uint16_t joint6Param16 = (uint16_t)((joint6Param + 175.0) * 10);
-  uint8_t speedParam8 = (uint8_t)(speedParam);
+  char buf[160] = {0};
+  char *pos=buf;
+  pos += sprintf(pos, "STATUS: Setting the angle of the joints to");
+  for (int ndx=0; ndx<6; ndx++) {
+    pos += sprintf(pos, " (%d) %.1f%s", ndx+1, jointParam[ndx], (ndx < 5 ? "," : ""));
+  }
+  sprintf(pos, " degrees at speed %d\r\n", speedParam);
+  mySerCmd.Print(buf);
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
-  Wire.write(0x26);
-  Wire.write(highByte(joint1Param16)); // Joint 1 Angle H
-  Wire.write(lowByte(joint1Param16)); // Joint 1 Angle L
-  Wire.write(highByte(joint2Param16)); // Joint 2 Angle H
-  Wire.write(lowByte(joint2Param16)); // Joint 2 Angle L
-  Wire.write(highByte(joint3Param16)); // Joint 3 Angle H
-  Wire.write(lowByte(joint3Param16)); // Joint 3 Angle L
-  Wire.write(highByte(joint4Param16)); // Joint 4 Angle H
-  Wire.write(lowByte(joint4Param16)); // Joint 4 Angle L
-  Wire.write(highByte(joint5Param16)); // Joint 5 Angle H
-  Wire.write(lowByte(joint5Param16)); // Joint 5 Angle L
-  Wire.write(highByte(joint6Param16)); // Joint 6 Angle H
-  Wire.write(lowByte(joint6Param16)); // Joint 6 Angle L
-  Wire.write(speedParam8);
+  Wire.write(I2C_COMMAND_ARM_ANGLES);
+  for (int ndx=0; ndx<6; ndx++) {
+    float limit = (ndx < 5 ? 165.0 : 175.0);
+    uint16_t jointParam16 = (uint16_t)((jointParam[ndx] + limit) * 10);
+    Wire.write(highByte(jointParam16)); // Joint Angle H
+    Wire.write(lowByte(jointParam16)); // Joint Angle L
+  }
+  Wire.write(speedParam);
   Wire.endTransmission();
 
   sendOK();
 }
 // END ARM CODE ADDED
-
 
 /* --------------------------------  Compare Left Result  -------------------------------*/
 void compare_left_result(VL53L7CX_ResultsData *Result) {
@@ -791,6 +758,9 @@ void setup() {
   mySerCmd.AddCmd("AANGLE", SERIALCMD_FROMALL, set_ANGLE);
   mySerCmd.AddCmd("AANGLES", SERIALCMD_FROMALL, set_ANGLES);
   // END NEW ARM CODE ADDED
+
+  // Face Commands
+  mySerCmd.AddCmd("FGAZE", SERIALCMD_FROMALL, set_GAZE);
 
   // Initialize I2C bus
   Wire.begin();
