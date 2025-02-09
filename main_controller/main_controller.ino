@@ -302,10 +302,11 @@ void Send_Goto(void) {
   behavior_control_goto_frame[sizeof(behavior_control_goto_frame)-1] = crcHex[0];
 
   // Display the frame to be sent
+  mySerCmd.Print((char *) "Transmitting base frame: ");
   for(int i = 0; i < sizeof(behavior_control_goto_frame); i++) {
-    String incomingHex = String(behavior_control_goto_frame[i], HEX);
-    incomingHex.toUpperCase();
-    mySerCmd.Print(incomingHex);
+    String outgoingHex = String(behavior_control_goto_frame[i], HEX);
+    outgoingHex.toUpperCase();
+    mySerCmd.Print(outgoingHex);
     mySerCmd.Print((char *) " ");
   }
   mySerCmd.Print((char *) "\r\n");
@@ -342,10 +343,11 @@ void Send_Dock(void) {
   behavior_control_dock_frame[sizeof(behavior_control_dock_frame)-1] = crcHex[0];
 
   // Display the frame to be sent
+  mySerCmd.Print((char *) "Transmitting base frame: ");
   for(int i = 0; i < sizeof(behavior_control_dock_frame); i++) {
-    String incomingHex = String(behavior_control_dock_frame[i], HEX);
-    incomingHex.toUpperCase();
-    mySerCmd.Print(incomingHex);
+    String outgoingHex = String(behavior_control_dock_frame[i], HEX);
+    outgoingHex.toUpperCase();
+    mySerCmd.Print(outgoingHex);
     mySerCmd.Print((char *) " ");
   }
   mySerCmd.Print((char *) "\r\n");
@@ -381,10 +383,11 @@ void Send_Bump(void) {
   simbumpersignal_frame[sizeof(simbumpersignal_frame)-1] = crcHex[0];
 
   // Display the frame to be sent
+  mySerCmd.Print((char *) "Transmitting base frame: ");
   for(int i = 0; i < sizeof(simbumpersignal_frame); i++) {
-    String incomingHex = String(simbumpersignal_frame[i], HEX);
-    incomingHex.toUpperCase();
-    mySerCmd.Print(incomingHex);
+    String outgoingHex = String(simbumpersignal_frame[i], HEX);
+    outgoingHex.toUpperCase();
+    mySerCmd.Print(outgoingHex);
     mySerCmd.Print((char *) " ");
   }
   mySerCmd.Print((char *) "\r\n");
@@ -421,10 +424,11 @@ void Send_Motor(void) {
   motor_frame[sizeof(motor_frame)-1] = crcHex[0];
 
   // Display the frame to be sent
+  mySerCmd.Print((char *) "Transmitting base frame: ");
   for(int i = 0; i < sizeof(motor_frame); i++) {
-    String incomingHex = String(motor_frame[i], HEX);
-    incomingHex.toUpperCase();
-    mySerCmd.Print(incomingHex);
+    String outgoingHex = String(motor_frame[i], HEX);
+    outgoingHex.toUpperCase();
+    mySerCmd.Print(outgoingHex);
     mySerCmd.Print((char *) " ");
   }
   mySerCmd.Print((char *) "\r\n");
