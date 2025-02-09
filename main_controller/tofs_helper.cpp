@@ -30,13 +30,18 @@ bool compare_result(VL53L7CX *sensor, long calibration_values[]) {
 
   do {
     status = sensor->vl53l7cx_check_data_ready(&NewDataReady);
-  } while (!NewDataReady);
+  } while (!NewDataReady && status == 0);
 
   if (status != 0 || NewDataReady == 0) {
     return false;
   }
 
   status = sensor->vl53l7cx_get_ranging_data(&Result);
+
+  if (status != 0) {
+    // get_ranging_data did complete successfully
+    return false;
+  }
 
   // Evaluate Result
 
@@ -145,7 +150,6 @@ void tofs_setup() {
     sensor_vl53l7cx_left.init_sensor(TOFS_LEFT_I2C_ADDRESS << 1); // since we powered off the sensor, we must re-init it
   } else {
     mySerCmd.Print((char *) "INFO: Re-initializing right sensor after reboot\r\n");
-
     sensor_vl53l7cx_right.init_sensor(TOFS_RIGHT_I2C_ADDRESS << 1);
   }
 
@@ -185,7 +189,12 @@ bool check_left_sensor() {
     return false;
   }
 
-  long left_calibration_values[] = {220, 275, 271, 397, 125, 406, 450, 390, 227, 452, 419, 350, 250, 387, 364, 312};
+  long left_calibration_values[] = {
+    220, 275, 271, 397,
+    125, 406, 450, 390,
+    227, 452, 419, 350,
+    250, 387, 364, 312
+  };
   return compare_result(&sensor_vl53l7cx_left, left_calibration_values);
 }
 
@@ -196,6 +205,11 @@ bool check_right_sensor() {
     return false;
   }
 
-  long right_calibration_values[] = {228, 385, 362, 309, 233, 430, 400, 338, 235, 259, 438, 375, 134, 245, 364, 376};
+  long right_calibration_values[] = {
+    228, 385, 362, 309,
+    233, 430, 400, 338,
+    235, 259, 438, 375,
+    134, 245, 364, 376
+  };
   return compare_result(&sensor_vl53l7cx_right, right_calibration_values);
 }
