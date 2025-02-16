@@ -597,9 +597,8 @@ void set_ANGLE(void) {
   }
 
   // Constrain values to acceptable range
-  jointParam = constrain(jointParam, 0, 6);
-  // float limit = (jointParam < 6 ? 165.0 : 175.0); // fw_arm_controller doesn't differentiate today for this command
-  float limit = 165.0;
+  jointParam = constrain(jointParam, 1, 6);
+  float limit = (jointParam < 6 ? 165.0 : 175.0);
   angleParam = constrain(angleParam, -1 * limit, limit);
   speedParam = constrain(speedParam, 0, 100);
 
@@ -607,7 +606,7 @@ void set_ANGLE(void) {
   sprintf(buf, "STATUS: Setting the angle of joint %d to %0.1f degrees at speed %d\r\n", jointParam, angleParam, speedParam);
   mySerCmd.Print(buf);
 
-  uint16_t angleParam16 = (uint16_t)((angleParam + limit) * 10);
+  uint16_t angleParam16 = (uint16_t)((angleParam + 0x7fff) * 10);
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
   Wire.write(I2C_COMMAND_ARM_ANGLE);
@@ -655,8 +654,7 @@ void set_ANGLES(void) {
   Wire.beginTransmission(ARM_I2C_ADDRESS);
   Wire.write(I2C_COMMAND_ARM_ANGLES);
   for (int ndx=0; ndx<6; ndx++) {
-    float limit = (ndx < 5 ? 165.0 : 175.0);
-    uint16_t jointParam16 = (uint16_t)((jointParam[ndx] + limit) * 10);
+    uint16_t jointParam16 = (uint16_t)((jointParam[ndx] + 0x7fff) * 10); // multiply by 10 and add half if uint16_t's max value to prepare signed float to send as unsigned uint16_t
     Wire.write(highByte(jointParam16)); // Joint Angle H
     Wire.write(lowByte(jointParam16)); // Joint Angle L
   }
