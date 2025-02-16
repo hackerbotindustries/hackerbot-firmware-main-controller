@@ -15,6 +15,7 @@ This sketch is written for the "Main Controller" PCBA. It serves several funtion
 #include <Wire.h>
 #include <Adafruit_NeoPixel.h>
 #include <vl53l7cx_class.h>
+#include "HackerbotShared.h"
 #include "HackerbotSerialCmd.h"
 #include "tofs_helper.h"
 
@@ -35,22 +36,6 @@ int arm_attached = 0;
 
 // Other defines and variables
 byte RxByte;
-#define AME_I2C_ADDRESS 0x5A              // Audio Mouth Eyes PCBA I2C address
-#define DYN_I2C_ADDRESS 0x5B              // Dynamixel Controller I2C address
-#define ARM_I2C_ADDRESS 0x5C              // Arm Controller I2C address
-
-// I2C command addresses
-// FIXME: need this to be sharable between projects - decide between a common library, a shared include directory (perhaps every sub-fw #include's a file from fw_main_controller?), or some other scheme
-#define I2C_COMMAND_PING 0x01
-#define I2C_COMMAND_VERSION 0x02
-#define I2C_COMMAND_HEAD_IDLE 0x08
-#define I2C_COMMAND_HEAD_LOOK 0x09
-#define I2C_COMMAND_FACE_GAZE 0x0A
-#define I2C_COMMAND_ARM_CALIBRATION 0x20
-#define I2C_COMMAND_ARM_OPEN 0x21
-#define I2C_COMMAND_ARM_CLOSE 0x22
-#define I2C_COMMAND_ARM_ANGLE 0x25
-#define I2C_COMMAND_ARM_ANGLES 0x26
 
 // ------------------- User functions --------------------
 void sendOK(void) {
@@ -598,7 +583,7 @@ void set_ANGLE(void) {
 
   // Constrain values to acceptable range
   jointParam = constrain(jointParam, 1, 6);
-  float limit = (jointParam < 6 ? 165.0 : 175.0);
+  float limit = LIMIT_FOR_ARM_JOINT(jointParam);
   angleParam = constrain(angleParam, -1 * limit, limit);
   speedParam = constrain(speedParam, 0, 100);
 
@@ -606,7 +591,7 @@ void set_ANGLE(void) {
   sprintf(buf, "STATUS: Setting the angle of joint %d to %0.1f degrees at speed %d\r\n", jointParam, angleParam, speedParam);
   mySerCmd.Print(buf);
 
-  uint16_t angleParam16 = (uint16_t)((angleParam + 0x7fff) * 10);
+  uint16_t angleParam16 = hb_ftoi(angleParam);
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
   Wire.write(I2C_COMMAND_ARM_ANGLE);
@@ -637,7 +622,7 @@ void set_ANGLES(void) {
 
   // Constrain values to acceptable range
   for (int ndx=0; ndx<6; ndx++) {
-    float limit = (ndx < 5 ? 165.0 : 175.0);
+    float limit = LIMIT_FOR_ARM_JOINT(ndx+1);
     jointParam[ndx] = constrain(jointParam[ndx], -1 * limit, limit);
   }
   speedParam = constrain(speedParam, 0, 100);
@@ -654,7 +639,7 @@ void set_ANGLES(void) {
   Wire.beginTransmission(ARM_I2C_ADDRESS);
   Wire.write(I2C_COMMAND_ARM_ANGLES);
   for (int ndx=0; ndx<6; ndx++) {
-    uint16_t jointParam16 = (uint16_t)((jointParam[ndx] + 0x7fff) * 10); // multiply by 10 and add half if uint16_t's max value to prepare signed float to send as unsigned uint16_t
+    uint16_t jointParam16 = hb_ftoi(jointParam[ndx]);
     Wire.write(highByte(jointParam16)); // Joint Angle H
     Wire.write(lowByte(jointParam16)); // Joint Angle L
   }
