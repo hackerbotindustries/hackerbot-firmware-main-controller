@@ -1,6 +1,6 @@
 #include <Wire.h>
-#include "HackerbotSerialCmd.h"
-#include "tofs_helper.h"
+#include "SerialCmd_Helper.h"
+#include "ToFs_Helper.h"
 
 #ifdef TOFS_DEBUG
 #define TOFS_VERBOSE_DEBUG(x) mySerCmd.Print(x)
@@ -8,7 +8,7 @@
 #define TOFS_VERBOSE_DEBUG(x) ;
 #endif
 
-extern HackerbotSerialCmd mySerCmd; // defined in the main sketch
+extern SerialCmdHelper mySerCmd; // defined in the main sketch
 
 VL53L7CX sensor_vl53l7cx_right(&Wire, 3); // LPn Enable Pin on D3
 VL53L7CX sensor_vl53l7cx_left(&Wire, 10); // Requires LPn to be set so using unused pin D10

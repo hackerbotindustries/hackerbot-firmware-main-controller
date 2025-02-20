@@ -1,7 +1,7 @@
 /*********************************************************************************
 Hackerbot Industries, LLC
 Created: April 2024
-Updated: 2025.01.011
+Updated: 2025.02.19
 
 This sketch is written for the "Main Controller" PCBA. It serves several funtions:
   1) Communicate with the SLAM Base Robot
@@ -11,41 +11,206 @@ This sketch is written for the "Main Controller" PCBA. It serves several funtion
   5) Handle user code for any user added I2C devices (eg QWIIC or STEMMA sensors)
 *********************************************************************************/
 
-#include <SerialCmd.h>
 #include <Wire.h>
+#include <SerialCmd.h>
 #include <Adafruit_NeoPixel.h>
 #include <vl53l7cx_class.h>
-#include "HackerbotShared.h"
-#include "HackerbotSerialCmd.h"
-#include "tofs_helper.h"
+
+#include "Hackerbot_Shared.h"
+#include "SerialCmd_Helper.h"
+#include "ToFs_Helper.h"
 
 // Main Controller software version
-#define VERSION_NUMBER 4
+#define VERSION_NUMBER 7
 
 // Set up the serial command processor
-HackerbotSerialCmd mySerCmd(Serial);
+SerialCmdHelper mySerCmd(Serial);
 
 // Onboard neopixel setup
 Adafruit_NeoPixel onboard_pixel(1, PIN_NEOPIXEL);
 
-char report[256];
-
-int head_ame_attached = 0;
-int head_dyn_attached = 0;
-int arm_attached = 0;
-
 // Other defines and variables
+#define TEMP_SENSOR_I2C_ADDRESS 0x4B
 byte RxByte;
 
-// ------------------- User functions --------------------
+bool head_ame_attached = false;
+bool head_dyn_attached = false;
+bool arm_attached = false;
+
+
+// -------------------------------------------------------
+// setup()
+// -------------------------------------------------------
+void setup() {
+  unsigned long serialTimout = millis();
+
+  Serial.begin(115200);
+  while(!Serial && millis() - serialTimout <= 5000);
+
+  Serial1.begin(230400);
+
+  delay(1000);
+
+  mySerCmd.Print((char *) "INFO: Initalizing application...\r\n");
+
+  onboard_pixel.begin();
+  onboard_pixel.setPixelColor(0, onboard_pixel.Color(0, 0, 10));
+  onboard_pixel.show();
+
+  // Command Setup
+  mySerCmd.AddCmd("PING", SERIALCMD_FROMALL, Send_Ping);
+  mySerCmd.AddCmd("VERSION", SERIALCMD_FROMALL, Get_Version);
+  mySerCmd.AddCmd("INIT", SERIALCMD_FROMALL, Send_Handshake);
+  mySerCmd.AddCmd("ENTER", SERIALCMD_FROMALL, Send_Enter);
+  mySerCmd.AddCmd("GOTO", SERIALCMD_FROMALL, Send_Goto);
+  mySerCmd.AddCmd("DOCK", SERIALCMD_FROMALL, Send_Dock);
+  mySerCmd.AddCmd("BUMP", SERIALCMD_FROMALL, Send_Bump);
+  mySerCmd.AddCmd("MOTOR", SERIALCMD_FROMALL, Send_Motor);  
+  //mySerCmd.AddCmd("GETML", SERIALCMD_FROMALL, Get_MapList);
+
+  // Head Commands
+  mySerCmd.AddCmd("H_IDLE", SERIALCMD_FROMALL, set_IDLE);
+  mySerCmd.AddCmd("H_LOOK", SERIALCMD_FROMALL, set_LOOK);
+  mySerCmd.AddCmd("H_GAZE", SERIALCMD_FROMALL, set_GAZE);
+
+  // Arm Commands
+  mySerCmd.AddCmd("A_CAL", SERIALCMD_FROMALL, run_CALIBRATION);
+  mySerCmd.AddCmd("A_OPEN", SERIALCMD_FROMALL, set_OPEN);
+  mySerCmd.AddCmd("A_CLOSE", SERIALCMD_FROMALL, set_CLOSE);
+  mySerCmd.AddCmd("A_ANGLE", SERIALCMD_FROMALL, set_ANGLE);
+  mySerCmd.AddCmd("A_ANGLES", SERIALCMD_FROMALL, set_ANGLES);
+
+  // Initialize I2C bus
+  Wire.begin();
+
+  // Scan for I2C devices (prevents the application from locking up if an accessory is missing)
+  Send_Ping();
+
+  Wire.beginTransmission(TOFS_LEFT_I2C_ADDRESS);
+  if (Wire.endTransmission () == 0) {
+    tofs_left_state = TOFS_STATE_ASSIGNED;
+    mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - LEFT DETECTED: ");
+    mySerCmd.Print((char *) STRING_FOR_TOFS_STATE(tofs_left_state));
+    mySerCmd.Print((char *) "\r\n");
+  }
+
+  Wire.beginTransmission(TOFS_RIGHT_I2C_ADDRESS);
+  if (Wire.endTransmission () == 0) {
+    tofs_right_state = TOFS_STATE_ASSIGNED;
+    mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - RIGHT DETECTED: ");
+    mySerCmd.Print((char *) STRING_FOR_TOFS_STATE(tofs_right_state));
+    mySerCmd.Print((char *) "\r\n");
+  }
+
+  Wire.beginTransmission(TOFS_DEFAULT_I2C_ADDRESS);
+  if (Wire.endTransmission () == 0) {
+    if (tofs_left_state != TOFS_STATE_ASSIGNED) {
+      tofs_left_state = TOFS_STATE_UNCONFIGURED;
+    }
+    if (tofs_right_state != TOFS_STATE_ASSIGNED) {
+      tofs_right_state = TOFS_STATE_UNCONFIGURED;
+    }
+    if (tofs_left_state == TOFS_STATE_UNCONFIGURED || tofs_right_state == TOFS_STATE_UNCONFIGURED) {
+      mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - REQUIRE CONFIGURATION\r\n");
+    } else {
+      mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - NEITHER REQUIRES CONFIGURATION, BUT SEEING DEVICE ON DEFAULT ADDRESS?\r\n");
+    }
+  }
+
+  tofs_setup();
+
+  onboard_pixel.setPixelColor(0, onboard_pixel.Color(0, 10, 0));
+  onboard_pixel.show();
+  mySerCmd.Print((char *) "INFO: Starting application...\r\n");
+}
+
+
+// -------------------------------------------------------
+// loop()
+// -------------------------------------------------------
+void loop() {
+  byte incomingByte;
+  byte incomingPacket[100];
+  int incomingPacketLen;
+  byte lenByte;
+  int8_t ret;
+  
+  // Read ToF sensor values and send a simulated bump command if an object is too close (only run if tof sensors are attached)
+  if (tofs_left_state == TOFS_STATE_READY || tofs_right_state == TOFS_STATE_READY) {
+    if (check_left_sensor()) {
+      mySerCmd.Print((char *) "INFO: Left Object Detected!\r\n");
+      Send_Bump();
+    }
+
+    if (check_right_sensor()) {
+      mySerCmd.Print((char *) "INFO: Right Object Detected!\r\n");
+      Send_Bump();
+    }
+  }
+
+  // Check for incoming serial commands
+  ret = mySerCmd.ReadSer();
+  if (ret == 0) {
+    mySerCmd.Print((char *) "ERROR: Urecognized command\r\n");
+  }
+
+  // Check for data coming from the SLAM base robot
+  if (Serial1.available()) {
+    incomingByte = Serial1.read();
+    incomingPacket[incomingPacketLen] = incomingByte;
+    incomingPacketLen++;
+    if (incomingByte == 0x55) {
+      while(!Serial1.available());
+      incomingByte = Serial1.read();
+      incomingPacket[incomingPacketLen] = incomingByte;
+      incomingPacketLen++;
+      if (incomingByte == 0xAA) {
+        while(!Serial1.available());
+        incomingByte = Serial1.read();
+        incomingPacket[incomingPacketLen] = incomingByte;
+        incomingPacketLen++;
+        while(!Serial1.available());
+        incomingByte = Serial1.read();
+        incomingPacket[incomingPacketLen] = incomingByte;
+        incomingPacketLen++;
+        while(!Serial1.available());
+        lenByte = Serial1.read();
+        incomingPacket[incomingPacketLen] = lenByte;
+        incomingPacketLen++;
+        for (int i = 0; i < (lenByte+2); i++) {
+          while(!Serial1.available());
+          incomingByte = Serial1.read();
+          incomingPacket[incomingPacketLen] = incomingByte;
+          incomingPacketLen++;
+        }
+
+        if ((incomingPacket[5] != 0x02) && ((incomingPacket[5] != 0x23))) {
+          for(int i = 0; i < incomingPacketLen; i++) {
+            String incomingHex = String(incomingPacket[i], HEX);
+            incomingHex.toUpperCase();
+            mySerCmd.Print(incomingHex);
+            mySerCmd.Print((char *) " ");
+          }
+          mySerCmd.Print((char *) "\r\n");
+        }
+      }
+    }
+  }
+}
+
+
+// -------------------------------------------------------
+// General SerialCmd Functions
+// -------------------------------------------------------
 void sendOK(void) {
   mySerCmd.Print((char *) "OK\r\n");
 }
 
-
-// --------------- Functions for SerialCmd ---------------
+// Sends pings out and listens for responses to see which hardware is attached to the main controller. Then sets the
+// approate flags to enable the associated functionality
+// Example - "PING"
 void Send_Ping(void) {
-  mySerCmd.Print((char *) "INFO: Main Controller           - ATTACHED\r\n");
+  mySerCmd.Print((char *)   "INFO: Main Controller           - ATTACHED\r\n");
 
   Wire.beginTransmission(75);
   if (Wire.endTransmission () == 0) {
@@ -73,21 +238,22 @@ void Send_Ping(void) {
 
   Wire.beginTransmission(AME_I2C_ADDRESS); // Head Mouth Eyes PCBA
   if (Wire.endTransmission () == 0) {
-    head_ame_attached = 1;
+    head_ame_attached = true;
     mySerCmd.Print((char *) "INFO: Audio/Mouth/Eyes PCBA     - ATTACHED\r\n");
   }
 
   Wire.beginTransmission(DYN_I2C_ADDRESS); // Dynamixel Contoller PCBA
   if (Wire.endTransmission () == 0) {
-    head_dyn_attached = 1;
+    head_dyn_attached = true;
     mySerCmd.Print((char *) "INFO: Head Dynamixel Controller - ATTACHED\r\n");
   }
 
   Wire.beginTransmission(ARM_I2C_ADDRESS); // Arm Controller PCBA
   if (Wire.endTransmission () == 0) {
-    arm_attached = 1;
+    arm_attached = true;
     mySerCmd.Print((char *) "INFO: Arm Controller            - ATTACHED\r\n");
   }
+
   sendOK();
 }
 
@@ -95,11 +261,11 @@ void Send_Ping(void) {
 // Reports the versions of the boards connected to the Hackerbot
 // Example - "VERSION"
 void Get_Version(void) {
-  mySerCmd.Print((char *) "STATUS: Main Controller (v");
+  mySerCmd.Print((char *) "INFO: Main Controller (v");
   mySerCmd.Print(VERSION_NUMBER);
   mySerCmd.Print((char *) ".0)\r\n");
   
-  if (head_ame_attached == 1) {
+  if (head_ame_attached) {
     Wire.beginTransmission(AME_I2C_ADDRESS);
     Wire.write(I2C_COMMAND_VERSION);
     Wire.endTransmission();
@@ -107,12 +273,12 @@ void Get_Version(void) {
     while(Wire.available()) {
       RxByte = Wire.read();
     }
-    mySerCmd.Print((char *) "STATUS: Audio Mouth Eyes (v");
+    mySerCmd.Print((char *) "INFO: Audio Mouth Eyes (v");
     mySerCmd.Print(RxByte);
     mySerCmd.Print((char *) ".0)\r\n");
   }
 
-  if (head_dyn_attached == 1) {
+  if (head_dyn_attached) {
     Wire.beginTransmission(DYN_I2C_ADDRESS);
     Wire.write(I2C_COMMAND_VERSION);
     Wire.endTransmission();
@@ -121,13 +287,13 @@ void Get_Version(void) {
     while(Wire.available()) {
       RxByte = Wire.read();
     }
-    mySerCmd.Print((char *) "STATUS: Dynamixel Controller (v");
+    mySerCmd.Print((char *) "INFO: Dynamixel Controller (v");
     mySerCmd.Print(RxByte);
     mySerCmd.Print((char *) ".0)\r\n");
   }
 
   // NEW ARM CODE ADDED
-  if (arm_attached == 1) {
+  if (arm_attached) {
     Wire.beginTransmission(ARM_I2C_ADDRESS);
     Wire.write(0x02);
     Wire.endTransmission();
@@ -136,7 +302,7 @@ void Get_Version(void) {
     while(Wire.available()) {
       RxByte = Wire.read();
     }
-    mySerCmd.Print((char *) "STATUS: Arm Controller (v");
+    mySerCmd.Print((char *) "INFO: Arm Controller (v");
     mySerCmd.Print(RxByte);
     mySerCmd.Print((char *) ".0)\r\n");
   }
@@ -432,7 +598,7 @@ void set_IDLE(void) {
   char * sParam;
   sParam = mySerCmd.ReadNext();
 
-  if (head_ame_attached == 0) {
+  if (head_ame_attached == false) {
     mySerCmd.Print((char *) "ERROR: Dynamixel controller not attached\r\n");
     return;
   }
@@ -447,13 +613,13 @@ void set_IDLE(void) {
     Wire.write(I2C_COMMAND_HEAD_IDLE);
     Wire.write(0x00);
     Wire.endTransmission();
-    mySerCmd.Print((char *) "STATUS: Head idle mode disabled\r\n");
+    mySerCmd.Print((char *) "INFO: Head idle mode disabled\r\n");
   } else {
     Wire.beginTransmission(DYN_I2C_ADDRESS);
     Wire.write(I2C_COMMAND_HEAD_IDLE);
     Wire.write(0x01);
     Wire.endTransmission();
-    mySerCmd.Print((char *) "STATUS: Head idle mode enabled\r\n");
+    mySerCmd.Print((char *) "INFO: Head idle mode enabled\r\n");
   }
 
   sendOK();
@@ -464,7 +630,7 @@ void set_LOOK(void) {
   float vertParam = 0.0;
   uint8_t speedParam = 0;
 
-  if (head_ame_attached == 0) {
+  if (head_ame_attached == false) {
     mySerCmd.Print((char *) "ERROR: Dynamixel controller not attached\r\n");
     return;
   }
@@ -480,7 +646,7 @@ void set_LOOK(void) {
   speedParam = constrain(speedParam, 6, 70);
 
   char buf[128] = {0};
-  sprintf(buf, "STATUS: Looking to position turn: %0.2f, vert: %0.2f, at speed: %d\r\n", turnParam, vertParam, speedParam);
+  sprintf(buf, "INFO: Looking to position turn: %0.2f, vert: %0.2f, at speed: %d\r\n", turnParam, vertParam, speedParam);
   mySerCmd.Print(buf);
 
   uint16_t turnParam16 = (uint16_t)(turnParam * 10);
@@ -503,7 +669,7 @@ void set_GAZE(void) {
   float eyeTargetX = 0.0;
   float eyeTargetY = 0.0;
 
-  if (head_ame_attached == 0) {
+  if (head_ame_attached == false) {
     mySerCmd.Print((char *) "ERROR: Audio/Mouth/Eyes controller not attached\r\n");
     return;
   }
@@ -518,7 +684,7 @@ void set_GAZE(void) {
   eyeTargetY = constrain(eyeTargetY, -1.0, 1.0);
 
   char buf[128] = {0};
-  sprintf(buf, "STATUS: Setting: eyeTargetX: %0.2f, eyeTargetY: %0.2f\r\n", eyeTargetX, eyeTargetY);
+  sprintf(buf, "INFO: Setting: eyeTargetX: %0.2f, eyeTargetY: %0.2f\r\n", eyeTargetX, eyeTargetY);
   mySerCmd.Print(buf);
 
   // scale to fit an int8 for smaller i2c transport
@@ -534,8 +700,11 @@ void set_GAZE(void) {
   sendOK();
 }
 
-// NEW ARM CODE ADDED
-// ACAL
+
+// -------------------------------------------------------
+// Arm Functions
+// -------------------------------------------------------
+// A_CAL
 void run_CALIBRATION(void) {
   mySerCmd.Print((char *) "INFO: Calibrating the gripper\r\n");
 
@@ -546,7 +715,7 @@ void run_CALIBRATION(void) {
   sendOK();
 }
 
-// AOPEN
+// A_OPEN
 void set_OPEN(void) {
   mySerCmd.Print((char *) "INFO: Opening the gripper\r\n");
 
@@ -557,7 +726,7 @@ void set_OPEN(void) {
   sendOK();
 }
 
-// ACLOSE
+// A_CLOSE
 void set_CLOSE(void) {
   mySerCmd.Print((char *) "INFO: Closing the gripper\r\n");
 
@@ -568,7 +737,7 @@ void set_CLOSE(void) {
   sendOK();
 }
 
-// AANGLE
+// A_ANGLE
 void set_ANGLE(void) {
   uint8_t jointParam = 0;
   float angleParam = 0.0;
@@ -588,7 +757,7 @@ void set_ANGLE(void) {
   speedParam = constrain(speedParam, 0, 100);
 
   char buf[128] = {0};
-  sprintf(buf, "STATUS: Setting the angle of joint %d to %0.1f degrees at speed %d\r\n", jointParam, angleParam, speedParam);
+  sprintf(buf, "INFO: Setting the angle of joint %d to %0.1f degrees at speed %d\r\n", jointParam, angleParam, speedParam);
   mySerCmd.Print(buf);
 
   uint16_t angleParam16 = hb_ftoi(angleParam);
@@ -604,7 +773,7 @@ void set_ANGLE(void) {
   sendOK();
 }
 
-// AANGLES
+// A_ANGLES
 void set_ANGLES(void) {
   float jointParam[6] = {0.0};
   uint8_t speedParam = 0;
@@ -629,7 +798,7 @@ void set_ANGLES(void) {
 
   char buf[160] = {0};
   char *pos=buf;
-  pos += sprintf(pos, "STATUS: Setting the angle of the joints to");
+  pos += sprintf(pos, "INFO: Setting the angle of the joints to");
   for (int ndx=0; ndx<6; ndx++) {
     pos += sprintf(pos, " (%d) %.1f%s", ndx+1, jointParam[ndx], (ndx < 5 ? "," : ""));
   }
@@ -648,192 +817,12 @@ void set_ANGLES(void) {
 
   sendOK();
 }
-// END ARM CODE ADDED
-
-// ----------------------- setup() -----------------------
-void setup() {
-  unsigned long serialTimout = millis();
-
-  Serial.begin(115200);
-  while(!Serial && millis() - serialTimout <= 5000);
-
-  Serial1.begin(230400);
-
-  delay(1000);
-
-  mySerCmd.Print((char *) "INFO: Initalizing application...\r\n");
-
-  onboard_pixel.begin();
-  onboard_pixel.setPixelColor(0, onboard_pixel.Color(0, 10, 0));
-  onboard_pixel.show();
-
-  // Command Setup
-  mySerCmd.AddCmd("PING", SERIALCMD_FROMALL, Send_Ping);
-  mySerCmd.AddCmd("VERSION", SERIALCMD_FROMALL, Get_Version);
-  mySerCmd.AddCmd("INIT", SERIALCMD_FROMALL, Send_Handshake);
-  mySerCmd.AddCmd("ENTER", SERIALCMD_FROMALL, Send_Enter);
-  mySerCmd.AddCmd("GOTO", SERIALCMD_FROMALL, Send_Goto);
-  mySerCmd.AddCmd("DOCK", SERIALCMD_FROMALL, Send_Dock);
-  mySerCmd.AddCmd("BUMP", SERIALCMD_FROMALL, Send_Bump);
-  mySerCmd.AddCmd("MOTOR", SERIALCMD_FROMALL, Send_Motor);  
-  //mySerCmd.AddCmd("GETML", SERIALCMD_FROMALL, Get_MapList);
-
-  // Head Commands
-  mySerCmd.AddCmd("HIDLE", SERIALCMD_FROMALL, set_IDLE);
-  mySerCmd.AddCmd("HLOOK", SERIALCMD_FROMALL, set_LOOK);
-
-  // NEW ARM CODE ADDED
-  // Arm Commands
-  mySerCmd.AddCmd("ACAL", SERIALCMD_FROMALL, run_CALIBRATION);
-  mySerCmd.AddCmd("AOPEN", SERIALCMD_FROMALL, set_OPEN);
-  mySerCmd.AddCmd("ACLOSE", SERIALCMD_FROMALL, set_CLOSE);
-  mySerCmd.AddCmd("AANGLE", SERIALCMD_FROMALL, set_ANGLE);
-  mySerCmd.AddCmd("AANGLES", SERIALCMD_FROMALL, set_ANGLES);
-  // END NEW ARM CODE ADDED
-
-  // Face Commands
-  mySerCmd.AddCmd("FGAZE", SERIALCMD_FROMALL, set_GAZE);
-
-  // Initialize I2C bus
-  Wire.begin();
-
-  // Scan for I2C devices (prevents the application from locking up if an accessory is missing)
-  Wire.beginTransmission(75);
-  if (Wire.endTransmission () == 0) {
-    mySerCmd.Print((char *) "STATUS: Temperature Sensor Attached\r\n");
-  }
-
-  Wire.beginTransmission(TOFS_LEFT_I2C_ADDRESS);
-  if (Wire.endTransmission () == 0) {
-    tofs_left_state = TOFS_STATE_ASSIGNED;
-    mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - LEFT DETECTED: ");
-    mySerCmd.Print((char *) STRING_FOR_TOFS_STATE(tofs_left_state));
-    mySerCmd.Print((char *) "\r\n");
-  }
-
-  Wire.beginTransmission(TOFS_RIGHT_I2C_ADDRESS);
-  if (Wire.endTransmission () == 0) {
-    tofs_right_state = TOFS_STATE_ASSIGNED;
-    mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - RIGHT DETECTED: ");
-    mySerCmd.Print((char *) STRING_FOR_TOFS_STATE(tofs_right_state));
-    mySerCmd.Print((char *) "\r\n");
-  }
-
-  Wire.beginTransmission(TOFS_DEFAULT_I2C_ADDRESS);
-  if (Wire.endTransmission () == 0) {
-    if (tofs_left_state != TOFS_STATE_ASSIGNED) {
-      tofs_left_state = TOFS_STATE_UNCONFIGURED;
-    }
-    if (tofs_right_state != TOFS_STATE_ASSIGNED) {
-      tofs_right_state = TOFS_STATE_UNCONFIGURED;
-    }
-    if (tofs_left_state == TOFS_STATE_UNCONFIGURED || tofs_right_state == TOFS_STATE_UNCONFIGURED) {
-      mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - REQUIRE CONFIGURATION\r\n");
-    } else {
-      mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - NEITHER REQUIRES CONFIGURATION, BUT SEEING DEVICE ON DEFAULT ADDRESS?\r\n");
-    }
-  }
-
-  Wire.beginTransmission(AME_I2C_ADDRESS); // Head Mouth Eyes PCBA
-  if (Wire.endTransmission () == 0) {
-    head_ame_attached = 1;
-    mySerCmd.Print((char *) "STATUS: Hackerbot Head Audio/Mouth/Eyes PCBA Attached\r\n");
-  }
-
-  Wire.beginTransmission(DYN_I2C_ADDRESS); // Dynamixel Contoller PCBA
-  if (Wire.endTransmission () == 0) {
-    head_dyn_attached = 1;
-    mySerCmd.Print((char *) "STATUS: Hackerbot Head Dynamixel Controller Attached\r\n");
-  }
-
-  Wire.beginTransmission(ARM_I2C_ADDRESS); // Arm Controller PCBA
-  if (Wire.endTransmission () == 0) {
-    arm_attached = 1;
-    mySerCmd.Print((char *) "STATUS: Hackerbot Arm Controller Attached\r\n");
-  }
-
-  tofs_setup();
-
-  onboard_pixel.setPixelColor(0, onboard_pixel.Color(0, 0, 10));
-  onboard_pixel.show();
-  mySerCmd.Print((char *) "INFO: Starting application...\r\n");
-}
 
 
-// ----------------------- loop() ------------------------
-void loop() {
-  byte incomingByte;
-  byte incomingPacket[100];
-  int incomingPacketLen;
-  byte lenByte;
-  int8_t ret;
-  
-  // Read ToF sensor values and send a simulated bump command if an object is too close (only run if tof sensors are attached)
-  if (tofs_left_state == TOFS_STATE_READY || tofs_right_state == TOFS_STATE_READY) {
-    if (check_left_sensor()) {
-      mySerCmd.Print((char *) "STATUS: Left Object Detected!\r\n");
-      Send_Bump();
-    }
-
-    if (check_right_sensor()) {
-      mySerCmd.Print((char *) "STATUS: Right Object Detected!\r\n");
-      Send_Bump();
-    }
-  }
-
-  // Check for incoming serial commands
-  ret = mySerCmd.ReadSer();
-  if (ret == 0) {
-    mySerCmd.Print((char *) "ERROR: Urecognized command\r\n");
-  }
-
-  // Check for data coming from the SLAM base robot
-  if (Serial1.available()) {
-    incomingByte = Serial1.read();
-    incomingPacket[incomingPacketLen] = incomingByte;
-    incomingPacketLen++;
-    if (incomingByte == 0x55) {
-      while(!Serial1.available());
-      incomingByte = Serial1.read();
-      incomingPacket[incomingPacketLen] = incomingByte;
-      incomingPacketLen++;
-      if (incomingByte == 0xAA) {
-        while(!Serial1.available());
-        incomingByte = Serial1.read();
-        incomingPacket[incomingPacketLen] = incomingByte;
-        incomingPacketLen++;
-        while(!Serial1.available());
-        incomingByte = Serial1.read();
-        incomingPacket[incomingPacketLen] = incomingByte;
-        incomingPacketLen++;
-        while(!Serial1.available());
-        lenByte = Serial1.read();
-        incomingPacket[incomingPacketLen] = lenByte;
-        incomingPacketLen++;
-        for (int i = 0; i < (lenByte+2); i++) {
-          while(!Serial1.available());
-          incomingByte = Serial1.read();
-          incomingPacket[incomingPacketLen] = incomingByte;
-          incomingPacketLen++;
-        }
-
-        if ((incomingPacket[5] != 0x02) && ((incomingPacket[5] != 0x23))) {
-          for(int i = 0; i < incomingPacketLen; i++) {
-            String incomingHex = String(incomingPacket[i], HEX);
-            incomingHex.toUpperCase();
-            mySerCmd.Print(incomingHex);
-            mySerCmd.Print((char *) " ");
-          }
-          mySerCmd.Print((char *) "\r\n");
-        }
-      }
-    }
-  }
-}
-
-
-
+// -------------------------------------------------------
+// CRC-16 Functions
 // CRC-16/XMODEM https://crccalc.com
+// -------------------------------------------------------
 static unsigned short const crc16_table[256] = {
 0x0000,0x1021,0x2042,0x3063,0x4084,0x50a5,0x60c6,0x70e7,
 0x8108,0x9129,0xa14a,0xb16b,0xc18c,0xd1ad,0xe1ce,0xf1ef,

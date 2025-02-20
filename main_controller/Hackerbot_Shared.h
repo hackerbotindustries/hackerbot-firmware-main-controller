@@ -1,5 +1,5 @@
-#ifndef HACKERBOTSHARED
-#define HACKERBOTSHARED
+#ifndef HACKERBOTSHARED_H
+#define HACKERBOTSHARED_H
 
 #define AME_I2C_ADDRESS 0x5A              // Audio Mouth Eyes PCBA I2C address
 #define DYN_I2C_ADDRESS 0x5B              // Dynamixel Controller I2C address
@@ -35,4 +35,4 @@ float hb_btof(byte* bytes) {
   return hb_itof((*bytes << 8) + *(bytes+1));
 }
 
-#endif // HACKERBOTSERIALCMD
+#endif

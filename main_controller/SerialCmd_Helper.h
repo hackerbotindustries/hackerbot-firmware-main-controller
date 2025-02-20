@@ -1,11 +1,11 @@
-#ifndef HACKERBOTSERIALCMD
-#define HACKERBOTSERIALCMD
+#ifndef SERIALCMDHELPER_H
+#define SERIALCMDHELPER_H
 
 #include <SerialCmd.h>
 
-class HackerbotSerialCmd: public SerialCmd {
+class SerialCmdHelper: public SerialCmd {
   public:
-    HackerbotSerialCmd ( Stream &mySerial, char TermCh = SERIALCMD_CR, char * SepCh = ( char * ) SERIALCMD_COMMA ) : SerialCmd ( mySerial, TermCh, SepCh ) {};
+    SerialCmdHelper ( Stream &mySerial, char TermCh = SERIALCMD_CR, char * SepCh = ( char * ) SERIALCMD_COMMA ) : SerialCmd ( mySerial, TermCh, SepCh ) {};
 
     bool ReadNextFloat(float *value) {
       char* valStr = NULL;
