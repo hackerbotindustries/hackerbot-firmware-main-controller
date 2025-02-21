@@ -92,7 +92,7 @@ void setup() {
 
   // If attached, configure the time of flight sensors
   if (tofs_attached) {
-    //tofs_setup();
+    tofs_setup();
   }
 
   // Change the on-board neopixel to green to indicate setup is complete
@@ -109,7 +109,7 @@ void setup() {
 // -------------------------------------------------------
 void loop() {
   byte incomingByte;
-  byte incomingPacket[100];
+  byte incomingPacket[128];
   int incomingPacketLen = 0;
   byte lenByte;
   int8_t ret;
@@ -163,8 +163,8 @@ void loop() {
           incomingPacketLen++;
         }
 
-        // Ignore async battery and pose status messages. Otherwise, print any messages received
-        if ((incomingPacket[5] != 0x02) && ((incomingPacket[5] != 0x23))) {
+        // Ignore async handshake, battery, and pose status messages. Otherwise, print any messages received
+        if ((incomingPacket[5] != 0x01) && (incomingPacket[5] != 0x02) && (incomingPacket[5] != 0x23)) {
           for(int i = 0; i < incomingPacketLen; i++) {
             String incomingHex = String(incomingPacket[i], HEX);
             incomingHex.toUpperCase();
@@ -177,11 +177,6 @@ void loop() {
     }
   }
 }
-
-
-// -------------------------------------------------------
-// General Helper Functions
-// -------------------------------------------------------
 
 
 // -------------------------------------------------------
@@ -295,64 +290,23 @@ void Get_Version(void) {
 }
 
 
-
-
-
-void Send_Frame(byte frame[], int sizeOfFrame) {
-  uint8_t crcHex[2];
-  uint16_t crc = crc16(&frame[2], sizeOfFrame - 4);
-
-  memcpy(crcHex, &crc, sizeof(crcHex));
-  frame[sizeOfFrame - 2] = crcHex[1];
-  frame[sizeOfFrame - 1] = crcHex[0];
-  
-  Serial1.write(frame, sizeOfFrame);
-
-  for(int i = 0; i < 88; i++) {
-    while(!Serial1.available());
-    byte incomingByte = Serial1.read();
-    String incomingHex = String(incomingByte, HEX);
-    incomingHex.toUpperCase();
-    mySerCmd.Print(incomingHex);
-    mySerCmd.Print((char *) " ");
-  }
-}
-
-void Send_Frame_Get_Response(byte frame[], int sizeOfFrame, byte response_frame[], int sizeOfResponseFrame) {
-  uint8_t crcHex[2];
-  uint16_t crc = crc16(&frame[2], sizeOfFrame - 4);
-
-  memcpy(crcHex, &crc, sizeof(crcHex));
-  frame[sizeOfFrame - 2] = crcHex[1];
-  frame[sizeOfFrame - 1] = crcHex[0];  
-  
-  Serial1.write(frame, sizeOfFrame);
-
-  for(int i = 0; i < sizeOfResponseFrame; i++) {
-    while(!Serial1.available());
-    byte incomingByte = Serial1.read();
-    String incomingHex = String(incomingByte, HEX);
-    incomingHex.toUpperCase();
-    response_frame[i] = (byte)strtoul(incomingHex.c_str(), NULL, 16);
-    mySerCmd.Print(incomingHex);
-    mySerCmd.Print((char *) " ");
-  }
-}
-
 // Initializes the connection between the Arduino on the Main Controller with the SLAM vacuum base robot. This must be run once after a power cycle before any other commands can be sent
 // Example - "INIT"
 void Send_Handshake(void) {
   byte response[88];
-  byte final_response[88];
 
-  mySerCmd.Print((char *) "Sending handshake_frame\r\n");
-  Send_Frame(handshake_frame, sizeof(handshake_frame), response, sizeof(response));
+  mySerCmd.Print((char *) "INFO: Sending handshake_frame\r\n");
+  Send_Frame_Get_Response(handshake_frame, sizeof(handshake_frame), response, sizeof(response));
 
-  response[2] = 0x02;
+  if (response[5] == 0x01) {
+    response[2] = 0x02;
 
-  mySerCmd.Print((char *) "Sending handshake acknowledgement frame\r\n");
-  Send_Frame(content, sizeof(content), final_response, sizeof(final_response));
-  
+    mySerCmd.Print((char *) "INFO: Sending handshake acknowledgement frame\r\n");
+    Send_Frame(response, sizeof(response));
+  } else {
+    mySerCmd.Print((char *) "WARNING: INIT has already been performed\r\n");
+  }
+
   sendOK();
 }
 
@@ -811,6 +765,150 @@ void set_ANGLES(void) {
   Wire.endTransmission();
 
   sendOK();
+}
+
+
+// -------------------------------------------------------
+// General Helper Functions
+// -------------------------------------------------------
+void Send_Frame(byte frame[], int sizeOfFrame) {
+  uint8_t crcHex[2];
+  uint16_t crc = crc16(&frame[2], sizeOfFrame - 4);
+
+  byte incomingByte;
+  byte incomingPacket[128];
+  int incomingPacketLen = 0;
+  byte lenByte;
+
+  memcpy(crcHex, &crc, sizeof(crcHex));
+  frame[sizeOfFrame - 2] = crcHex[1];
+  frame[sizeOfFrame - 1] = crcHex[0];
+
+  mySerCmd.Print((char *) "INFO: Transmitted ");
+  for(int i = 0; i < sizeOfFrame; i++) {
+    byte outgoingByte = frame[i];
+    String outgoingHex = String(outgoingByte, HEX);
+    outgoingHex.toUpperCase();
+    mySerCmd.Print(outgoingHex);
+    mySerCmd.Print((char *) " ");
+  }
+  mySerCmd.Print((char *) "\r\n");
+
+  Serial1.write(frame, sizeOfFrame);
+
+  while(!Serial1.available());
+  incomingByte = Serial1.read();
+  incomingPacket[incomingPacketLen] = incomingByte;
+  incomingPacketLen++;
+  if (incomingByte == 0x55) {
+    while(!Serial1.available());
+    incomingByte = Serial1.read();
+    incomingPacket[incomingPacketLen] = incomingByte;
+    incomingPacketLen++;
+    if (incomingByte == 0xAA) {
+      while(!Serial1.available());
+      incomingByte = Serial1.read();
+      incomingPacket[incomingPacketLen] = incomingByte;
+      incomingPacketLen++;
+      while(!Serial1.available());
+      incomingByte = Serial1.read();
+      incomingPacket[incomingPacketLen] = incomingByte;
+      incomingPacketLen++;
+      while(!Serial1.available());
+      lenByte = Serial1.read();
+      incomingPacket[incomingPacketLen] = lenByte;
+      incomingPacketLen++;
+      for (int i = 0; i < (lenByte+2); i++) {
+        while(!Serial1.available());
+        incomingByte = Serial1.read();
+        incomingPacket[incomingPacketLen] = incomingByte;
+        incomingPacketLen++;
+      }
+    }
+  }
+
+  mySerCmd.Print((char *) "INFO: Received    ");
+  for(int i = 0; i < incomingPacketLen; i++) {
+    String incomingHex = String(incomingPacket[i], HEX);
+    incomingHex.toUpperCase();
+    mySerCmd.Print(incomingHex);
+    mySerCmd.Print((char *) " ");
+  }
+  mySerCmd.Print((char *) "\r\n");
+}
+
+
+void Send_Frame_Get_Response(byte frame[], int sizeOfFrame, byte response_frame[], int sizeOfResponseFrame) {
+  uint8_t crcHex[2];
+  uint16_t crc = crc16(&frame[2], sizeOfFrame - 4);
+
+  byte incomingByte;
+  byte incomingPacket[128];
+  int incomingPacketLen = 0;
+  byte lenByte;
+
+  memcpy(crcHex, &crc, sizeof(crcHex));
+  frame[sizeOfFrame - 2] = crcHex[1];
+  frame[sizeOfFrame - 1] = crcHex[0];
+  
+  mySerCmd.Print((char *) "INFO: Transmitted ");
+  for(int i = 0; i < sizeOfFrame; i++) {
+    byte outgoingByte = frame[i];
+    String outgoingHex = String(outgoingByte, HEX);
+    outgoingHex.toUpperCase();
+    mySerCmd.Print(outgoingHex);
+    mySerCmd.Print((char *) " ");
+  }
+  mySerCmd.Print((char *) "\r\n");
+
+  Serial1.write(frame, sizeOfFrame);
+
+  while(!Serial1.available());
+  incomingByte = Serial1.read();
+  incomingPacket[incomingPacketLen] = incomingByte;
+  incomingPacketLen++;
+  if (incomingByte == 0x55) {
+    while(!Serial1.available());
+    incomingByte = Serial1.read();
+    incomingPacket[incomingPacketLen] = incomingByte;
+    incomingPacketLen++;
+    if (incomingByte == 0xAA) {
+      while(!Serial1.available());
+      incomingByte = Serial1.read();
+      incomingPacket[incomingPacketLen] = incomingByte;
+      incomingPacketLen++;
+      while(!Serial1.available());
+      incomingByte = Serial1.read();
+      incomingPacket[incomingPacketLen] = incomingByte;
+      incomingPacketLen++;
+      while(!Serial1.available());
+      lenByte = Serial1.read();
+      incomingPacket[incomingPacketLen] = lenByte;
+      incomingPacketLen++;
+      for (int i = 0; i < (lenByte+2); i++) {
+        while(!Serial1.available());
+        incomingByte = Serial1.read();
+        incomingPacket[incomingPacketLen] = incomingByte;
+        incomingPacketLen++;
+      }
+    }
+  }
+
+  mySerCmd.Print((char *) "INFO: Received    ");
+  for(int i = 0; i < incomingPacketLen; i++) {
+    if (i < sizeOfResponseFrame) {
+      response_frame[i] = incomingPacket[i];
+    }
+    String incomingHex = String(incomingPacket[i], HEX);
+    incomingHex.toUpperCase();
+    mySerCmd.Print(incomingHex);
+    mySerCmd.Print((char *) " ");
+  }
+  mySerCmd.Print((char *) "\r\n");
+
+  if (incomingPacketLen != sizeOfResponseFrame) {
+    mySerCmd.Print((char *) "WARNING: Length of the frame received does not match the length that was specified\r\n");
+  }
 }
 
 

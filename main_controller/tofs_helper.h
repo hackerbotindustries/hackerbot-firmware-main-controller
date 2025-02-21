@@ -17,7 +17,7 @@ extern "C" {
 #include <vl53l7cx_class.h>
 
 // Define this if you would like verbose diagnostics on the TOF sensor startup
-//#define TOFS_DEBUG
+#define TOFS_DEBUG
 
 #define TOFS_DEFAULT_I2C_ADDRESS  0x29     // Time of flight sensor unconfigured default address
 #define TOF_LEFT_I2C_ADDRESS      0x2A     // Time of flight sensor (left) configured address
