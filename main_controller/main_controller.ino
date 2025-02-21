@@ -70,7 +70,7 @@ void setup() {
   mySerCmd.AddCmd("DOCK", SERIALCMD_FROMALL, Send_Dock);
   mySerCmd.AddCmd("BUMP", SERIALCMD_FROMALL, Send_Bump);
   mySerCmd.AddCmd("MOTOR", SERIALCMD_FROMALL, Send_Motor);  
-  //mySerCmd.AddCmd("GETML", SERIALCMD_FROMALL, Get_MapList);
+  mySerCmd.AddCmd("GETMAPLIST", SERIALCMD_FROMALL, Get_MapList);
 
   // Head Commands
   mySerCmd.AddCmd("H_IDLE", SERIALCMD_FROMALL, set_IDLE);
@@ -312,23 +312,11 @@ void Send_Handshake(void) {
 
 
 // Gets a list of all of the maps stored on the robot
-// Example - "GETML"
+// Example - "GETMAPLIST"
 void Get_MapList(void) {
-  byte get_map_list_frame[] = {
-    0x55, 0xAA, // HEADER_HI, HEADER_LOW
-    0x02, // CTRL_ID
-    0x00, 0x17, // LEN_HI, LEN_LOW
-    0x20, // PACKET_ID
-    0x15, // PACKET_LEN
-    0x00, // map_num
-    0x00, 0x00, 0x00, 0x00, // map_id_1
-    0x00, 0x00, 0x00, 0x00, // map_id_2
-    0x00, 0x00, 0x00, 0x00, // map_id_3
-    0x00, 0x00, 0x00, 0x00, // map_id_4
-    0x00, 0x00, 0x00, 0x00, // map_id_5
-    0x9A, 0x8A // CRC_HI, CRC_LOW
-  };
-  Serial1.write(get_map_list_frame, sizeof(get_map_list_frame));
+  mySerCmd.Print((char *) "INFO: Sending get_map_list_frame\r\n");
+
+  Send_Frame(get_map_list_frame, sizeof(get_map_list_frame));
 
   sendOK();
 }
