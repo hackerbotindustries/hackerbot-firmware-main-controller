@@ -1,3 +1,11 @@
+/*********************************************************************************
+Hackerbot Industries, LLC
+Created: February 2024
+
+A shared library of defines and helper functions used across all of the Hackerbot
+controller PCBs (main, dynamixel, audio/mouth/eyes, eyes, and arm)
+*********************************************************************************/
+
 #ifndef HACKERBOTSHARED_H
 #define HACKERBOTSHARED_H
 
@@ -9,9 +17,9 @@
 // FIXME: need this to be sharable between projects - decide between a common library, a shared include directory (perhaps every sub-fw #include's a file from fw_main_controller?), or some other scheme
 #define I2C_COMMAND_PING 0x01
 #define I2C_COMMAND_VERSION 0x02
-#define I2C_COMMAND_HEAD_IDLE 0x08
-#define I2C_COMMAND_HEAD_LOOK 0x09
-#define I2C_COMMAND_FACE_GAZE 0x0A
+#define I2C_COMMAND_H_IDLE 0x08
+#define I2C_COMMAND_H_LOOK 0x09
+#define I2C_COMMAND_H_GAZE 0x0A
 #define I2C_COMMAND_ARM_CALIBRATION 0x20
 #define I2C_COMMAND_ARM_OPEN 0x21
 #define I2C_COMMAND_ARM_CLOSE 0x22

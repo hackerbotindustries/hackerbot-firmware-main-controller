@@ -1,7 +1,7 @@
 /*********************************************************************************
 Hackerbot Industries, LLC
 Created: April 2024
-Updated: 2025.02.19
+Updated: 2025.02.20
 
 This sketch is written for the "Main Controller" PCBA. It serves several funtions:
   1) Communicate with the SLAM Base Robot
@@ -19,6 +19,7 @@ This sketch is written for the "Main Controller" PCBA. It serves several funtion
 #include "Hackerbot_Shared.h"
 #include "SerialCmd_Helper.h"
 #include "ToFs_Helper.h"
+#include "SLAM_Base_Frames.h"
 
 // Main Controller software version
 #define VERSION_NUMBER 7
@@ -36,6 +37,8 @@ byte RxByte;
 bool head_ame_attached = false;
 bool head_dyn_attached = false;
 bool arm_attached = false;
+bool tofs_attached = false;
+bool temperature_sensor_attached = false;
 
 
 // -------------------------------------------------------
@@ -52,6 +55,7 @@ void setup() {
   delay(1000);
 
   mySerCmd.Print((char *) "INFO: Initalizing application...\r\n");
+  mySerCmd.Print((char *) "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n");
 
   onboard_pixel.begin();
   onboard_pixel.setPixelColor(0, onboard_pixel.Color(0, 0, 10));
@@ -86,41 +90,16 @@ void setup() {
   // Scan for I2C devices (prevents the application from locking up if an accessory is missing)
   Send_Ping();
 
-  Wire.beginTransmission(TOFS_LEFT_I2C_ADDRESS);
-  if (Wire.endTransmission () == 0) {
-    tofs_left_state = TOFS_STATE_ASSIGNED;
-    mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - LEFT DETECTED: ");
-    mySerCmd.Print((char *) STRING_FOR_TOFS_STATE(tofs_left_state));
-    mySerCmd.Print((char *) "\r\n");
+  // If attached, configure the time of flight sensors
+  if (tofs_attached) {
+    //tofs_setup();
   }
 
-  Wire.beginTransmission(TOFS_RIGHT_I2C_ADDRESS);
-  if (Wire.endTransmission () == 0) {
-    tofs_right_state = TOFS_STATE_ASSIGNED;
-    mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - RIGHT DETECTED: ");
-    mySerCmd.Print((char *) STRING_FOR_TOFS_STATE(tofs_right_state));
-    mySerCmd.Print((char *) "\r\n");
-  }
-
-  Wire.beginTransmission(TOFS_DEFAULT_I2C_ADDRESS);
-  if (Wire.endTransmission () == 0) {
-    if (tofs_left_state != TOFS_STATE_ASSIGNED) {
-      tofs_left_state = TOFS_STATE_UNCONFIGURED;
-    }
-    if (tofs_right_state != TOFS_STATE_ASSIGNED) {
-      tofs_right_state = TOFS_STATE_UNCONFIGURED;
-    }
-    if (tofs_left_state == TOFS_STATE_UNCONFIGURED || tofs_right_state == TOFS_STATE_UNCONFIGURED) {
-      mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - REQUIRE CONFIGURATION\r\n");
-    } else {
-      mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - NEITHER REQUIRES CONFIGURATION, BUT SEEING DEVICE ON DEFAULT ADDRESS?\r\n");
-    }
-  }
-
-  tofs_setup();
-
+  // Change the on-board neopixel to green to indicate setup is complete
   onboard_pixel.setPixelColor(0, onboard_pixel.Color(0, 10, 0));
   onboard_pixel.show();
+
+  mySerCmd.Print((char *) "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n");
   mySerCmd.Print((char *) "INFO: Starting application...\r\n");
 }
 
@@ -131,7 +110,7 @@ void setup() {
 void loop() {
   byte incomingByte;
   byte incomingPacket[100];
-  int incomingPacketLen;
+  int incomingPacketLen = 0;
   byte lenByte;
   int8_t ret;
   
@@ -184,6 +163,7 @@ void loop() {
           incomingPacketLen++;
         }
 
+        // Ignore async battery and pose status messages. Otherwise, print any messages received
         if ((incomingPacket[5] != 0x02) && ((incomingPacket[5] != 0x23))) {
           for(int i = 0; i < incomingPacketLen; i++) {
             String incomingHex = String(incomingPacket[i], HEX);
@@ -200,6 +180,11 @@ void loop() {
 
 
 // -------------------------------------------------------
+// General Helper Functions
+// -------------------------------------------------------
+
+
+// -------------------------------------------------------
 // General SerialCmd Functions
 // -------------------------------------------------------
 void sendOK(void) {
@@ -212,28 +197,28 @@ void sendOK(void) {
 void Send_Ping(void) {
   mySerCmd.Print((char *)   "INFO: Main Controller           - ATTACHED\r\n");
 
-  Wire.beginTransmission(75);
+  Wire.beginTransmission(TEMP_SENSOR_I2C_ADDRESS);
   if (Wire.endTransmission () == 0) {
+    temperature_sensor_attached = true;
     mySerCmd.Print((char *) "INFO: Temperature Sensor        - ATTACHED\r\n");
-  }
-
-  Wire.beginTransmission(TOFS_LEFT_I2C_ADDRESS);
-  if (Wire.endTransmission () == 0) {
-    mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - LEFT DETECTED: ");
-    mySerCmd.Print((char *) STRING_FOR_TOFS_STATE(tofs_left_state));
-    mySerCmd.Print((char *) "\r\n");
-  }
-
-  Wire.beginTransmission(TOFS_RIGHT_I2C_ADDRESS);
-  if (Wire.endTransmission () == 0) {
-    mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - RIGHT DETECTED: ");
-    mySerCmd.Print((char *) STRING_FOR_TOFS_STATE(tofs_right_state));
-    mySerCmd.Print((char *) "\r\n");
   }
 
   Wire.beginTransmission(TOFS_DEFAULT_I2C_ADDRESS);
   if (Wire.endTransmission () == 0) {
-    mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - UNASSIGNED SENSOR(S) DETECTED\r\n");
+    tofs_attached = true;
+    mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - ATTACHED (not configured)\r\n");
+  } else {
+    Wire.beginTransmission(TOF_LEFT_I2C_ADDRESS);
+    if (Wire.endTransmission () == 0) {
+      tofs_attached = true;
+      mySerCmd.Print((char *) "INFO: Left ToF Sensor           - ATTACHED\r\n");
+    }
+
+    Wire.beginTransmission(TOF_RIGHT_I2C_ADDRESS);
+    if (Wire.endTransmission () == 0) {
+      tofs_attached = true;
+      mySerCmd.Print((char *) "INFO: Right ToF Sensor          - ATTACHED\r\n");
+    }
   }
 
   Wire.beginTransmission(AME_I2C_ADDRESS); // Head Mouth Eyes PCBA
@@ -292,7 +277,6 @@ void Get_Version(void) {
     mySerCmd.Print((char *) ".0)\r\n");
   }
 
-  // NEW ARM CODE ADDED
   if (arm_attached) {
     Wire.beginTransmission(ARM_I2C_ADDRESS);
     Wire.write(0x02);
@@ -306,58 +290,69 @@ void Get_Version(void) {
     mySerCmd.Print(RxByte);
     mySerCmd.Print((char *) ".0)\r\n");
   }
-  // END NEW ARM CODE ADDED
 
   sendOK();
 }
 
 
-// Initializes the connection between the Arduino on the Main Controller with the SLAM vacuum base robot. This must be run once after a power cycle before any other commands can be sent
-// Example - "INIT"
-void Send_Handshake(void) {
-  byte handshake1_frame[] = {
-    0x55, 0xAA, // HEADER_HI, HEADER_LOW
-    0x02, // CTRL_ID
-    0x00, 0x51, // LEN_HI, LEN_LOW
-    0x01, // PACKET_ID
-    0x4f, // PACKET_LEN
-    0x00, // step
-    0x50, 0x43, 0x5F, 0x54, 0x45, 0x53, 0x54, 0x00, 0x00, 0x00, 0x00, 0x00,// model "PC_TEST"
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // core_version
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // chassis_version
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // mac_addr
-    0x00, 0x00, 0x00, 0x00, // ip
-    0xA5, // use_uart 0xa5
-    0x00, // rssi
-    0x00, // noise_level
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // reserved
-    0x89, 0xab // CRC_HI, CRC_LOW
-  };
 
-  byte content[88];
-  mySerCmd.Print((char *) "Sending handshake1_frame\r\n");
-  Serial1.write(handshake1_frame, sizeof(handshake1_frame));
+
+
+void Send_Frame(byte frame[], int sizeOfFrame) {
+  uint8_t crcHex[2];
+  uint16_t crc = crc16(&frame[2], sizeOfFrame - 4);
+
+  memcpy(crcHex, &crc, sizeof(crcHex));
+  frame[sizeOfFrame - 2] = crcHex[1];
+  frame[sizeOfFrame - 1] = crcHex[0];
+  
+  Serial1.write(frame, sizeOfFrame);
+
   for(int i = 0; i < 88; i++) {
     while(!Serial1.available());
     byte incomingByte = Serial1.read();
     String incomingHex = String(incomingByte, HEX);
     incomingHex.toUpperCase();
-    content[i] = (byte)strtoul(incomingHex.c_str(), NULL, 16);
     mySerCmd.Print(incomingHex);
     mySerCmd.Print((char *) " ");
   }
+}
 
-  content[2] = 0x02;
-  // Calculate the CRC of the frame (clipping off the first 2 and last 2 bytes sent to the crc function)
+void Send_Frame_Get_Response(byte frame[], int sizeOfFrame, byte response_frame[], int sizeOfResponseFrame) {
   uint8_t crcHex[2];
-  uint16_t crc = crc16(&content[2], sizeof(content)-4);
-  memcpy(crcHex, &crc, sizeof(crcHex));
-  content[sizeof(content)-2] = crcHex[1];
-  content[sizeof(content)-1] = crcHex[0];
+  uint16_t crc = crc16(&frame[2], sizeOfFrame - 4);
 
-  mySerCmd.Print((char *) "Sending handshake2_frame\r\n");
-  //Serial1.write(handshake2_frame, sizeof(handshake2_frame));
-  Serial1.write(content, sizeof(content));
+  memcpy(crcHex, &crc, sizeof(crcHex));
+  frame[sizeOfFrame - 2] = crcHex[1];
+  frame[sizeOfFrame - 1] = crcHex[0];  
+  
+  Serial1.write(frame, sizeOfFrame);
+
+  for(int i = 0; i < sizeOfResponseFrame; i++) {
+    while(!Serial1.available());
+    byte incomingByte = Serial1.read();
+    String incomingHex = String(incomingByte, HEX);
+    incomingHex.toUpperCase();
+    response_frame[i] = (byte)strtoul(incomingHex.c_str(), NULL, 16);
+    mySerCmd.Print(incomingHex);
+    mySerCmd.Print((char *) " ");
+  }
+}
+
+// Initializes the connection between the Arduino on the Main Controller with the SLAM vacuum base robot. This must be run once after a power cycle before any other commands can be sent
+// Example - "INIT"
+void Send_Handshake(void) {
+  byte response[88];
+  byte final_response[88];
+
+  mySerCmd.Print((char *) "Sending handshake_frame\r\n");
+  Send_Frame(handshake_frame, sizeof(handshake_frame), response, sizeof(response));
+
+  response[2] = 0x02;
+
+  mySerCmd.Print((char *) "Sending handshake acknowledgement frame\r\n");
+  Send_Frame(content, sizeof(content), final_response, sizeof(final_response));
+  
   sendOK();
 }
 
@@ -610,13 +605,13 @@ void set_IDLE(void) {
 
   if (strtoul(sParam, NULL, 10) == 0) {
     Wire.beginTransmission(DYN_I2C_ADDRESS);
-    Wire.write(I2C_COMMAND_HEAD_IDLE);
+    Wire.write(I2C_COMMAND_H_IDLE);
     Wire.write(0x00);
     Wire.endTransmission();
     mySerCmd.Print((char *) "INFO: Head idle mode disabled\r\n");
   } else {
     Wire.beginTransmission(DYN_I2C_ADDRESS);
-    Wire.write(I2C_COMMAND_HEAD_IDLE);
+    Wire.write(I2C_COMMAND_H_IDLE);
     Wire.write(0x01);
     Wire.endTransmission();
     mySerCmd.Print((char *) "INFO: Head idle mode enabled\r\n");
@@ -654,7 +649,7 @@ void set_LOOK(void) {
   uint8_t speedParam8 = (uint8_t)(speedParam);
 
   Wire.beginTransmission(DYN_I2C_ADDRESS);
-  Wire.write(I2C_COMMAND_HEAD_LOOK);
+  Wire.write(I2C_COMMAND_H_LOOK);
   Wire.write(highByte(turnParam16)); // Yaw H
   Wire.write(lowByte(turnParam16)); // YAW L
   Wire.write(highByte(vertParam16)); // Pitch H
@@ -692,7 +687,7 @@ void set_GAZE(void) {
   int8_t eyeTargetYInt8 = int8_t(eyeTargetY * 100.0);
 
   Wire.beginTransmission(AME_I2C_ADDRESS);
-  Wire.write(I2C_COMMAND_FACE_GAZE);
+  Wire.write(I2C_COMMAND_H_GAZE);
   Wire.write((uint8_t)eyeTargetXInt8);
   Wire.write((uint8_t)eyeTargetYInt8);
   Wire.endTransmission();
@@ -859,7 +854,7 @@ static unsigned short const crc16_table[256] = {
 };
 
 
-static uint16_t crc16(uint8_t* data, uint16_t length) {
+static uint16_t crc16(byte *data, uint16_t length) {
   uint16_t crc = 0;
   while (length--) {
       crc = (crc << 8) ^ crc16_table[((crc >> 8) ^ *data++) & 0x00FF];

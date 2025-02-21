@@ -1,3 +1,12 @@
+/*********************************************************************************
+Hackerbot Industries, LLC
+Created: February 2024
+
+Configuration and helper functions for the time of flight sensors that are on
+most Hackerbot models so that the robot can avoid obstacles taller than the 
+built in bump and LiDAR sensors can "see"
+*********************************************************************************/
+
 #ifndef TOFS_HELPER_H
 #define TOFS_HELPER_H
 
@@ -11,8 +20,8 @@ extern "C" {
 //#define TOFS_DEBUG
 
 #define TOFS_DEFAULT_I2C_ADDRESS  0x29     // Time of flight sensor unconfigured default address
-#define TOFS_LEFT_I2C_ADDRESS     0x2A     // Time of flight sensor (left) configured address
-#define TOFS_RIGHT_I2C_ADDRESS    0x2B     // Time of flight sensor (right) configured address
+#define TOF_LEFT_I2C_ADDRESS      0x2A     // Time of flight sensor (left) configured address
+#define TOF_RIGHT_I2C_ADDRESS     0x2B     // Time of flight sensor (right) configured address
 
 enum tofs_state_t {
   TOFS_STATE_ABSENT = 0,

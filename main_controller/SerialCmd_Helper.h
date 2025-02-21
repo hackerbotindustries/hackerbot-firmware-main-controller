@@ -1,3 +1,10 @@
+/*********************************************************************************
+Hackerbot Industries, LLC
+Created: February 2024
+
+Adds some supplimental helper functions related to the SerialCmd libary
+*********************************************************************************/
+
 #ifndef SERIALCMDHELPER_H
 #define SERIALCMDHELPER_H
 
