@@ -65,10 +65,12 @@ void setup() {
   mySerCmd.AddCmd("PING", SERIALCMD_FROMALL, Send_Ping);
   mySerCmd.AddCmd("VERSION", SERIALCMD_FROMALL, Get_Version);
   mySerCmd.AddCmd("INIT", SERIALCMD_FROMALL, Send_Handshake);
-  mySerCmd.AddCmd("IDLE", SERIALCMD_FROMALL, Send_Idle);
+  mySerCmd.AddCmd("MODE", SERIALCMD_FROMALL, Send_Mode);
   mySerCmd.AddCmd("ENTER", SERIALCMD_FROMALL, Send_Enter);
+  mySerCmd.AddCmd("QUICKMAP", SERIALCMD_FROMALL, Send_QuickMap);
   mySerCmd.AddCmd("GOTO", SERIALCMD_FROMALL, Send_Goto);
   mySerCmd.AddCmd("DOCK", SERIALCMD_FROMALL, Send_Dock);
+  mySerCmd.AddCmd("STOP", SERIALCMD_FROMALL, Send_Stop);
   mySerCmd.AddCmd("BUMP", SERIALCMD_FROMALL, Send_Bump);
   mySerCmd.AddCmd("MOTOR", SERIALCMD_FROMALL, Send_Motor);  
   mySerCmd.AddCmd("GETMAPLIST", SERIALCMD_FROMALL, Get_MapList);
@@ -115,12 +117,14 @@ void loop() {
   if (tofs_left_state == TOFS_STATE_READY || tofs_right_state == TOFS_STATE_READY) {
     if (check_left_sensor()) {
       mySerCmd.Print((char *) "INFO: Left Object Detected!\r\n");
-      Send_Bump();
+      //Send_Bump();
+      ret = mySerCmd.ReadString((char *) "BUMP,0,1");
     }
 
     if (check_right_sensor()) {
       mySerCmd.Print((char *) "INFO: Right Object Detected!\r\n");
-      Send_Bump();
+      //Send_Bump();
+      ret = mySerCmd.ReadString((char *) "BUMP,1,0");
     }
   }
 
@@ -270,11 +274,21 @@ void Send_Handshake(void) {
 
 
 // Set mode control to idle.
-// Example - "IDLE"
-void Send_Idle(void) {
-  mySerCmd.Print((char *) "INFO: Sending mode_control_idle_frame\r\n");
+// Example - "MODE"
+void Send_Mode(void) {
+  uint8_t modeParam = 0;
 
-  Send_Frame(mode_control_idle_frame, sizeof(mode_control_idle_frame));
+  if (!mySerCmd.ReadNextUInt8(&modeParam)) {
+    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    return;
+  }
+
+  // Constrain values to acceptable range and set the value into the frame
+  modeParam = constrain(modeParam, 0, 12);
+  mode_control_frame[7] = modeParam;
+
+  mySerCmd.Print((char *) "INFO: Sending mode_control_frame\r\n");
+  Send_Frame(mode_control_frame, sizeof(mode_control_frame));
 
   sendOK();
 }
@@ -284,7 +298,6 @@ void Send_Idle(void) {
 // Example - "GETMAPLIST"
 void Get_MapList(void) {
   mySerCmd.Print((char *) "INFO: Sending get_map_list_frame\r\n");
-
   Send_Frame(get_map_list_frame, sizeof(get_map_list_frame));
 
   sendOK();
@@ -294,24 +307,72 @@ void Get_MapList(void) {
 // Set mode to enter. This moves the robot off the dock and starts the LiDAR
 // Example - "ENTER"
 void Send_Enter(void) {
-  mySerCmd.Print((char *) "INFO: Sending behavior_control_enter_frame\r\n");
-
-  Send_Frame(behavior_control_enter_frame, sizeof(behavior_control_enter_frame));
+  mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (ENTER)\r\n");
+  Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
 
   sendOK();
 }
 
 
-// Go to pose command
+// Set mode to quick map. This moves the robot off the dock and generates an automatic map of your space
+// Example - "QUICKMAP"
+void Send_QuickMap(void) {
+  behavior_control_frame[7] = 1;
+
+  mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (QUICKMAP)\r\n");
+  Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
+
+  sendOK();
+}
+
+
+// Return to the charger dock and begin charging
+// Example - "DOCK"
+void Send_Dock(void) {
+  behavior_control_frame[7] = 6;
+
+  mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (DOCK)\r\n");
+  Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
+
+  sendOK();
+}
+
+
+// Send a stop command to the base
+// Example - "STOP"
+void Send_Stop(void) {
+  behavior_control_frame[7] = 7;
+
+  mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (STOP)\r\n");
+  Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
+
+  sendOK();
+}
+
+
+// Go to pose command. Must have a map created first.
 // Parameters
-// float: x, float: y, float: angle, float: speed
+// float: x (meters), float: y (meters), float: angle (degrees), float: speed (m/s)
 // Example - "GOTO,0.5,0.5,0,10"
 void Send_Goto(void) {
-  // Handle command parameters
-  float xParam = atof(mySerCmd.ReadNext());
-  float yParam = atof(mySerCmd.ReadNext());
-  float aParam = atof(mySerCmd.ReadNext());
-  float sParam = atof(mySerCmd.ReadNext());
+  float xParam = 0.0;
+  float yParam = 0.0;
+  float aParam = 0.0;
+  float sParam = 0.0;
+
+  if (!mySerCmd.ReadNextFloat(&xParam) || !mySerCmd.ReadNextFloat(&yParam) || !mySerCmd.ReadNextFloat(&aParam) || !mySerCmd.ReadNextFloat(&sParam)) {
+    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    return;
+  }
+
+  // Constrain values to acceptable range
+  xParam = constrain(xParam, -1000.0, 1000.0);
+  yParam = constrain(yParam, -1000.0, 1000.0);
+  aParam = constrain(aParam, -360.0, 360.0);
+  sParam = constrain(sParam, 0.0, 0.4);
+
+  // Convert degrees to radians
+  aParam = aParam * (3.1416 / 180.0);
 
   uint8_t xParamHex[4];
   uint8_t yParamHex[4];
@@ -323,54 +384,28 @@ void Send_Goto(void) {
   memcpy(aParamHex, &aParam, sizeof(aParamHex));
   memcpy(sParamHex, &sParam, sizeof(sParamHex));
 
-  // Create the frame
-  byte behavior_control_goto_frame[] = {
-    0x55, 0xAA, // HEADER_HI, HEADER_LOW
-    0x02, // CTRL_ID
-    0x00, 0x44, // LEN_HI, LEN_LOW
-    0x22, // PACKET_ID
-    0x42, // PACKET_LEN
-    0x04, // bid
-    0x00, // status
-    xParamHex[0], xParamHex[1], xParamHex[2], xParamHex[3], // x
-    yParamHex[0], yParamHex[1], yParamHex[2], yParamHex[3], // y
-    aParamHex[0], aParamHex[1], aParamHex[2], aParamHex[3], // angle
-    sParamHex[0], sParamHex[1], sParamHex[2], sParamHex[3], // speed
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // reserved[48];
-    0x00, 0x00 // CRC_HI, CRC_LOW
-  };
+  behavior_control_frame[9]  = xParamHex[0];
+  behavior_control_frame[10] = xParamHex[1];
+  behavior_control_frame[11] = xParamHex[2];
+  behavior_control_frame[12] = xParamHex[3];
 
-   // Calculate the CRC of the frame (clipping off the first 2 and last 2 bytes sent to the crc function)
-  uint8_t crcHex[2];
-  uint16_t crc = crc16(&behavior_control_goto_frame[2], sizeof(behavior_control_goto_frame)-4);
-  memcpy(crcHex, &crc, sizeof(crcHex));
-  behavior_control_goto_frame[sizeof(behavior_control_goto_frame)-2] = crcHex[1];
-  behavior_control_goto_frame[sizeof(behavior_control_goto_frame)-1] = crcHex[0];
+  behavior_control_frame[13] = yParamHex[0];
+  behavior_control_frame[14] = yParamHex[1];
+  behavior_control_frame[15] = yParamHex[2];
+  behavior_control_frame[16] = yParamHex[3];
 
-  // Display the frame to be sent
-  mySerCmd.Print((char *) "Transmitting base frame: ");
-  for(int i = 0; i < sizeof(behavior_control_goto_frame); i++) {
-    String outgoingHex = String(behavior_control_goto_frame[i], HEX);
-    outgoingHex.toUpperCase();
-    mySerCmd.Print(outgoingHex);
-    mySerCmd.Print((char *) " ");
-  }
-  mySerCmd.Print((char *) "\r\n");
+  behavior_control_frame[17] = aParamHex[0];
+  behavior_control_frame[18] = aParamHex[1];
+  behavior_control_frame[19] = aParamHex[2];
+  behavior_control_frame[20] = aParamHex[3];
 
-  // Send the frame
-  Serial1.write(behavior_control_goto_frame, sizeof(behavior_control_goto_frame));
+  behavior_control_frame[21] = sParamHex[0];
+  behavior_control_frame[22] = sParamHex[1];
+  behavior_control_frame[23] = sParamHex[2];
+  behavior_control_frame[24] = sParamHex[3];
 
-  sendOK();
-}
-
-
-// Go to dock command
-// Example - "DOCK"
-void Send_Dock(void) {
-  mySerCmd.Print((char *) "INFO: Sending behavior_control_dock_frame\r\n");
-
-  Send_Frame(behavior_control_dock_frame, sizeof(behavior_control_dock_frame));
+  mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (GOTO)\r\n");
+  Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
 
   sendOK();
 }
@@ -381,36 +416,23 @@ void Send_Dock(void) {
 // bool: left, bool: right
 // Example - "BUMP,1,0"
 void Send_Bump(void) {
-  // Create the frame
-  byte simbumpersignal_frame[] = {
-    0x55, 0xAA, // HEADER_HI, HEADER_LOW
-    0x02, // CTRL_ID
-    0x00, 0x03, // LEN_HI, LEN_LOW
-    0x24, // PACKET_ID
-    0x01, // PACKET_LEN
-    0x01, // binary: 0, 0, 0, 0, 0, 0, left, right
-    0x00, 0x00 // CRC_HI, CRC_LOW
-  };
+  uint8_t leftParam = 0;
+  uint8_t rightParam = 0;
 
-   // Calculate the CRC of the frame (clipping off the first 2 and last 2 bytes sent to the crc function)
-  uint8_t crcHex[2];
-  uint16_t crc = crc16(&simbumpersignal_frame[2], sizeof(simbumpersignal_frame)-4);
-  memcpy(crcHex, &crc, sizeof(crcHex));
-  simbumpersignal_frame[sizeof(simbumpersignal_frame)-2] = crcHex[1];
-  simbumpersignal_frame[sizeof(simbumpersignal_frame)-1] = crcHex[0];
-
-  // Display the frame to be sent
-  mySerCmd.Print((char *) "Transmitting base frame: ");
-  for(int i = 0; i < sizeof(simbumpersignal_frame); i++) {
-    String outgoingHex = String(simbumpersignal_frame[i], HEX);
-    outgoingHex.toUpperCase();
-    mySerCmd.Print(outgoingHex);
-    mySerCmd.Print((char *) " ");
+  if (!mySerCmd.ReadNextUInt8(&leftParam) || !mySerCmd.ReadNextUInt8(&rightParam)) {
+    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    return;
   }
-  mySerCmd.Print((char *) "\r\n");
 
-  // Send the frame
-  Serial1.write(simbumpersignal_frame, sizeof(simbumpersignal_frame));
+  // Constrain values to acceptable range and set the value into the frame
+  leftParam = constrain(leftParam, 0, 1);
+  rightParam = constrain(rightParam, 0, 1);
+
+  // binary: 0, 0, 0, 0, 0, 0, left, right
+  sim_bump_frame[7] = (leftParam << 1) | rightParam;
+
+  mySerCmd.Print((char *) "INFO: Sending sim_bump_frame\r\n");
+  Send_Frame(sim_bump_frame, sizeof(sim_bump_frame));
 
   sendOK();
 }
@@ -418,40 +440,39 @@ void Send_Bump(void) {
 
 // Wheel motor packet
 // Parameters
-// int16_t: linear_velocity, int16_t: angular_velocity
-// Example - "MOTOR,1,0"
+// int16_t: linear_velocity (mm/s), int16_t: angular_velocity (degrees/s)
+// Example - "MOTOR,10,20"
 void Send_Motor(void) {
-  // Create the frame
-  byte motor_frame[] = {
-    0x55, 0xAA, // HEADER_HI, HEADER_LOW
-    0x02, // CTRL_ID
-    0x00, 0x06, // LEN_HI, LEN_LOW
-    0x09, // PACKET_ID
-    0x04, // PACKET_LEN
-    0x9C, 0xFF, // linear velocity
-    0x00, 0x00, // angular velocity
-    0x00, 0x00 // CRC_HI, CRC_LOW
-  };
+  float linearParam = 0.0;
+  float angularParam = 0.0;
 
-   // Calculate the CRC of the frame (clipping off the first 2 and last 2 bytes sent to the crc function)
-  uint8_t crcHex[2];
-  uint16_t crc = crc16(&motor_frame[2], sizeof(motor_frame)-4);
-  memcpy(crcHex, &crc, sizeof(crcHex));
-  motor_frame[sizeof(motor_frame)-2] = crcHex[1];
-  motor_frame[sizeof(motor_frame)-1] = crcHex[0];
+  int16_t linearParam16 = 0;
+  int16_t angularParam16 = 0;
 
-  // Display the frame to be sent
-  mySerCmd.Print((char *) "Transmitting base frame: ");
-  for(int i = 0; i < sizeof(motor_frame); i++) {
-    String outgoingHex = String(motor_frame[i], HEX);
-    outgoingHex.toUpperCase();
-    mySerCmd.Print(outgoingHex);
-    mySerCmd.Print((char *) " ");
+  if (!mySerCmd.ReadNextFloat(&linearParam) || !mySerCmd.ReadNextFloat(&angularParam)) {
+    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    return;
   }
-  mySerCmd.Print((char *) "\r\n");
 
-  // Send the frame
-  Serial1.write(motor_frame, sizeof(motor_frame));
+  // Constrain values to acceptable range and set the value into the frame
+  linearParam = constrain(linearParam, -100.0, 100.0);
+  angularParam = constrain(angularParam, -100.0, 100.0);
+
+  // Convert degrees/s to mrad/s
+  angularParam = angularParam * ((1000 * 3.1416) / 180);
+
+  // Convert the floats to signed int16_t
+  linearParam16 = (int16_t)linearParam;
+  angularParam16 = (int16_t)angularParam;
+
+  wheel_motor_frame[7]  = lowByte(linearParam16);
+  wheel_motor_frame[8]  = highByte(linearParam16);
+
+  wheel_motor_frame[9]  = lowByte(angularParam16);
+  wheel_motor_frame[10] = highByte(angularParam16);
+
+  mySerCmd.Print((char *) "INFO: Sending wheel_motor_frame\r\n");
+  Send_Frame(wheel_motor_frame, sizeof(wheel_motor_frame));
 
   sendOK();
 }
@@ -490,6 +511,7 @@ void set_IDLE(void) {
 
   sendOK();
 }
+
 
 void set_LOOK(void) {
   float turnParam = 0.0;
@@ -530,6 +552,7 @@ void set_LOOK(void) {
 
   sendOK();
 }
+
 
 void set_GAZE(void) {
   float eyeTargetX = 0.0;
@@ -656,24 +679,24 @@ void set_ANGLES(void) {
   }
 
   // Constrain values to acceptable range
-  for (int ndx=0; ndx<6; ndx++) {
+  for (int ndx = 0; ndx < 6; ndx++) {
     float limit = LIMIT_FOR_ARM_JOINT(ndx+1);
     jointParam[ndx] = constrain(jointParam[ndx], -1 * limit, limit);
   }
   speedParam = constrain(speedParam, 0, 100);
 
   char buf[160] = {0};
-  char *pos=buf;
+  char *pos = buf;
   pos += sprintf(pos, "INFO: Setting the angle of the joints to");
-  for (int ndx=0; ndx<6; ndx++) {
-    pos += sprintf(pos, " (%d) %.1f%s", ndx+1, jointParam[ndx], (ndx < 5 ? "," : ""));
+  for (int ndx = 0; ndx < 6; ndx++) {
+    pos += sprintf(pos, " (%d) %.1f%s", ndx + 1, jointParam[ndx], (ndx < 5 ? "," : ""));
   }
   sprintf(pos, " degrees at speed %d\r\n", speedParam);
   mySerCmd.Print(buf);
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
   Wire.write(I2C_COMMAND_ARM_ANGLES);
-  for (int ndx=0; ndx<6; ndx++) {
+  for (int ndx = 0; ndx < 6; ndx++) {
     uint16_t jointParam16 = hb_ftoi(jointParam[ndx]);
     Wire.write(highByte(jointParam16)); // Joint Angle H
     Wire.write(lowByte(jointParam16)); // Joint Angle L
@@ -692,16 +715,17 @@ void Get_Packet() {
   unsigned long responseTimeout = millis();
   const int response_timeout_period = 5000;
 
+  const int incomingPacketBuffSize = 320;
   uint8_t incomingByte;
-  uint8_t incomingPacket[128];
+  uint8_t incomingPacket[incomingPacketBuffSize] = {0};
   int incomingPacketLen = 0;
   uint8_t lenByteHigh;
   uint8_t lenByteLow;
   uint16_t lenByte;
-  
-  // Make sure the first two bytes of the array are cleared
-  incomingPacket[0] = 0;
-  incomingPacket[1] = 0;
+  uint8_t packetID;
+
+  char hexString[3];
+  const char hexChars[] = "0123456789ABCDEF";
 
   while(incomingPacket[0] != 0x55 && incomingPacket[1] != 0xAA) {
     while(!Serial1.available()) {
@@ -716,9 +740,10 @@ void Get_Packet() {
 
     if(incomingPacket[incomingPacketLen] != 0x55) {
       mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0x55) ");
-      String incomingHex = String(incomingPacket[incomingPacketLen], HEX);
-      incomingHex.toUpperCase();
-      mySerCmd.Print(incomingHex);
+      hexString[0] = hexChars[incomingPacket[incomingPacketLen] >> 4];
+      hexString[1] = hexChars[incomingPacket[incomingPacketLen] & 0x0F];
+      hexString[2] = '\0';
+      mySerCmd.Print(hexString);
       mySerCmd.Print((char *) "\r\n");
     } else {
       incomingPacketLen++;
@@ -735,9 +760,10 @@ void Get_Packet() {
 
       if(incomingPacket[incomingPacketLen] != 0xAA) {
         mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0xAA) ");
-        String incomingHex = String(incomingPacket[incomingPacketLen], HEX);
-        incomingHex.toUpperCase();
-        mySerCmd.Print(incomingHex);
+        hexString[0] = hexChars[incomingPacket[incomingPacketLen] >> 4];
+        hexString[1] = hexChars[incomingPacket[incomingPacketLen] & 0x0F];
+        hexString[2] = '\0';
+        mySerCmd.Print(hexString);
         mySerCmd.Print((char *) "\r\n");
 
         incomingPacketLen = 0;
@@ -787,13 +813,21 @@ void Get_Packet() {
 
   lenByte = (lenByteHigh << 8) | lenByteLow;
 
-  if (lenByte >= (128 - 9)) {
-    mySerCmd.Print((char *) "WARNING: Packet length is too long for the incomingPacket buffer\r\n");
-    lenByte = 128 - 9;
+  // Wait for and receive the PACKET_ID
+  while(!Serial1.available()) {
+    if(millis() - responseTimeout >= response_timeout_period) {
+        mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the PACKET_ID in the response packet\r\n");
+        return;
+    }
   }
 
+  incomingByte = Serial1.read();
+  incomingPacket[incomingPacketLen] = incomingByte;
+  packetID = incomingPacket[incomingPacketLen];
+  incomingPacketLen++;
+
   // Wait for and receive the remaining packet data
-  for (int i = 0; i < (lenByte + 2); i++) {
+  for (int i = 0; i < (lenByte + 1); i++) {
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
           mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the DATA or CRC in the response packet\r\n");
@@ -801,10 +835,26 @@ void Get_Packet() {
       }
     }
 
-    incomingByte = Serial1.read();
-    incomingPacket[incomingPacketLen] = incomingByte;
-    incomingPacketLen++;
+    if (lenByte <= (incomingPacketBuffSize - 7)) {
+      incomingByte = Serial1.read();
+      incomingPacket[incomingPacketLen] = incomingByte;
+      incomingPacketLen++;
+    } else {
+      incomingByte = Serial1.read();
+    }
   }
+
+  if (lenByte > (incomingPacketBuffSize - 7)) {
+    mySerCmd.Print((char *) "WARNING: Packet length is too long for the incomingPacket buffer. Throwing out ");
+    mySerCmd.Print(lenByte + 7);
+    mySerCmd.Print((char *) " bytes from PACKET_ID 0x");
+    hexString[0] = hexChars[packetID >> 4];
+    hexString[1] = hexChars[packetID & 0x0F];
+    hexString[2] = '\0';
+    mySerCmd.Print(hexString);
+    mySerCmd.Print((char *) "\r\n");
+    return;
+  } 
 
   // Don't display...
   // Status Packets = 0x02
@@ -813,14 +863,17 @@ void Get_Packet() {
     return;
   }
 
-  mySerCmd.Print((char *) "INFO: Received Pk ");
+  mySerCmd.Print((char *) "INFO: Received    ");
   for (int i = 0; i < incomingPacketLen; i++) {
-    String incomingHex = String(incomingPacket[i], HEX);
-    incomingHex.toUpperCase();
-    mySerCmd.Print(incomingHex);
+    hexString[0] = hexChars[incomingPacket[i] >> 4];
+    hexString[1] = hexChars[incomingPacket[i] & 0x0F];
+    hexString[2] = '\0';
+    mySerCmd.Print(hexString);
     mySerCmd.Print((char *) " ");
   }
-  mySerCmd.Print((char *) "\r\n");
+  mySerCmd.Print((char *) " (");
+  mySerCmd.Print(incomingPacketLen);
+  mySerCmd.Print((char *) ")\r\n");
 }
 
 
@@ -836,16 +889,19 @@ void Send_Frame(byte frame[], int sizeOfFrame) {
   int incomingPacketLen = 0;
   byte lenByte;
 
+  char hexString[3];
+  const char hexChars[] = "0123456789ABCDEF";
+
   memcpy(crcHex, &crc, sizeof(crcHex));
   frame[sizeOfFrame - 2] = crcHex[1];
   frame[sizeOfFrame - 1] = crcHex[0];
 
   mySerCmd.Print((char *) "INFO: Transmitted ");
   for(int i = 0; i < sizeOfFrame; i++) {
-    byte outgoingByte = frame[i];
-    String outgoingHex = String(outgoingByte, HEX);
-    outgoingHex.toUpperCase();
-    mySerCmd.Print(outgoingHex);
+    hexString[0] = hexChars[frame[i] >> 4];
+    hexString[1] = hexChars[frame[i] & 0x0F];
+    hexString[2] = '\0';
+    mySerCmd.Print(hexString);
     mySerCmd.Print((char *) " ");
   }
   mySerCmd.Print((char *) "\r\n");
