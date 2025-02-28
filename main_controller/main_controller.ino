@@ -752,7 +752,9 @@ void setup() {
     mySerCmd.Print((char *) "STATUS: Hackerbot Arm Controller Attached\r\n");
   }
 
-  tofs_setup();
+  if (tofs_left_state != TOFS_STATE_ABSENT || tofs_right_state != TOFS_STATE_ABSENT) {
+    tofs_setup();
+  }
 
   onboard_pixel.setPixelColor(0, onboard_pixel.Color(0, 0, 10));
   onboard_pixel.show();

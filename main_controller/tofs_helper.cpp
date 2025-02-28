@@ -117,7 +117,7 @@ void tofs_setup() {
     TOFS_VERBOSE_DEBUG((char *) "      Powering on right sensor\r\n");
     sensor_vl53l7cx_right.vl53l7cx_on();
     delay(100);
-  } else {
+  } else if (tofs_left_state == TOFS_STATE_ASSIGNED) {
     mySerCmd.Print((char *) "INFO: Re-initializing left sensor after reboot\r\n");
     sensor_vl53l7cx_left.init_sensor(TOFS_LEFT_I2C_ADDRESS << 1);
   }
@@ -148,7 +148,7 @@ void tofs_setup() {
     delay(100);
     TOFS_VERBOSE_DEBUG((char *) "INFO: Re-initializing left sensor after sensor power off\r\n");
     sensor_vl53l7cx_left.init_sensor(TOFS_LEFT_I2C_ADDRESS << 1); // since we powered off the sensor, we must re-init it
-  } else {
+  } else if (tofs_right_state == TOFS_STATE_ASSIGNED) {
     mySerCmd.Print((char *) "INFO: Re-initializing right sensor after reboot\r\n");
     sensor_vl53l7cx_right.init_sensor(TOFS_RIGHT_I2C_ADDRESS << 1);
   }
