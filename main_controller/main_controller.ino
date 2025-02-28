@@ -15,7 +15,9 @@ This sketch is written for the "Main Controller" PCBA. It serves several funtion
 #include <Wire.h>
 #include <Adafruit_NeoPixel.h>
 #include <vl53l7cx_class.h>
+#include "HackerbotShared.h"
 #include "HackerbotSerialCmd.h"
+#include "tofs_helper.h"
 
 // Main Controller software version
 #define VERSION_NUMBER 4
@@ -26,37 +28,14 @@ HackerbotSerialCmd mySerCmd(Serial);
 // Onboard neopixel setup
 Adafruit_NeoPixel onboard_pixel(1, PIN_NEOPIXEL);
 
-// ToF Setup and variables
-void compare_left_result(VL53L7CX_ResultsData *Result);
-void compare_right_result(VL53L7CX_ResultsData *Result);
-
-VL53L7CX sensor_vl53l7cx_right(&Wire, 3); // LPn Enable Pin on D3
-VL53L7CX sensor_vl53l7cx_left(&Wire, 10); // Requires LPn to be set so using unused pin D10
 char report[256];
 
-int tofs_attached = 0;
 int head_ame_attached = 0;
 int head_dyn_attached = 0;
 int arm_attached = 0;
 
 // Other defines and variables
 byte RxByte;
-#define AME_I2C_ADDRESS 90          // Audio Mouth Eyes PCBA I2C address
-#define DYN_I2C_ADDRESS 91          // Dynamixel Controller I2C address
-#define ARM_I2C_ADDRESS 92          // Arm Controller I2C address
-
-// I2C command addresses
-// FIXME: need this to be sharable between projects - decide between a common library, a shared include directory (perhaps every sub-fw #include's a file from fw_main_controller?), or some other scheme
-#define I2C_COMMAND_PING 0x01
-#define I2C_COMMAND_VERSION 0x02
-#define I2C_COMMAND_HEAD_IDLE 0x08
-#define I2C_COMMAND_HEAD_LOOK 0x09
-#define I2C_COMMAND_FACE_GAZE 0x0A
-#define I2C_COMMAND_ARM_CALIBRATION 0x20
-#define I2C_COMMAND_ARM_OPEN 0x21
-#define I2C_COMMAND_ARM_CLOSE 0x22
-#define I2C_COMMAND_ARM_ANGLE 0x25
-#define I2C_COMMAND_ARM_ANGLES 0x26
 
 // ------------------- User functions --------------------
 void sendOK(void) {
@@ -73,25 +52,38 @@ void Send_Ping(void) {
     mySerCmd.Print((char *) "INFO: Temperature Sensor        - ATTACHED\r\n");
   }
 
-  Wire.beginTransmission(41);
+  Wire.beginTransmission(TOFS_LEFT_I2C_ADDRESS);
   if (Wire.endTransmission () == 0) {
-    tofs_attached = 1;
-    mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - ATTACHED\r\n");
+    mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - LEFT DETECTED: ");
+    mySerCmd.Print((char *) STRING_FOR_TOFS_STATE(tofs_left_state));
+    mySerCmd.Print((char *) "\r\n");
   }
 
-  Wire.beginTransmission(90); // Head Mouth Eyes PCBA
+  Wire.beginTransmission(TOFS_RIGHT_I2C_ADDRESS);
+  if (Wire.endTransmission () == 0) {
+    mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - RIGHT DETECTED: ");
+    mySerCmd.Print((char *) STRING_FOR_TOFS_STATE(tofs_right_state));
+    mySerCmd.Print((char *) "\r\n");
+  }
+
+  Wire.beginTransmission(TOFS_DEFAULT_I2C_ADDRESS);
+  if (Wire.endTransmission () == 0) {
+    mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - UNASSIGNED SENSOR(S) DETECTED\r\n");
+  }
+
+  Wire.beginTransmission(AME_I2C_ADDRESS); // Head Mouth Eyes PCBA
   if (Wire.endTransmission () == 0) {
     head_ame_attached = 1;
     mySerCmd.Print((char *) "INFO: Audio/Mouth/Eyes PCBA     - ATTACHED\r\n");
   }
 
-  Wire.beginTransmission(91); // Dynamixel Contoller PCBA
+  Wire.beginTransmission(DYN_I2C_ADDRESS); // Dynamixel Contoller PCBA
   if (Wire.endTransmission () == 0) {
     head_dyn_attached = 1;
     mySerCmd.Print((char *) "INFO: Head Dynamixel Controller - ATTACHED\r\n");
   }
 
-  Wire.beginTransmission(92); // Arm Controller PCBA
+  Wire.beginTransmission(ARM_I2C_ADDRESS); // Arm Controller PCBA
   if (Wire.endTransmission () == 0) {
     arm_attached = 1;
     mySerCmd.Print((char *) "INFO: Arm Controller            - ATTACHED\r\n");
@@ -295,10 +287,11 @@ void Send_Goto(void) {
   behavior_control_goto_frame[sizeof(behavior_control_goto_frame)-1] = crcHex[0];
 
   // Display the frame to be sent
+  mySerCmd.Print((char *) "Transmitting base frame: ");
   for(int i = 0; i < sizeof(behavior_control_goto_frame); i++) {
-    String incomingHex = String(behavior_control_goto_frame[i], HEX);
-    incomingHex.toUpperCase();
-    mySerCmd.Print(incomingHex);
+    String outgoingHex = String(behavior_control_goto_frame[i], HEX);
+    outgoingHex.toUpperCase();
+    mySerCmd.Print(outgoingHex);
     mySerCmd.Print((char *) " ");
   }
   mySerCmd.Print((char *) "\r\n");
@@ -335,10 +328,11 @@ void Send_Dock(void) {
   behavior_control_dock_frame[sizeof(behavior_control_dock_frame)-1] = crcHex[0];
 
   // Display the frame to be sent
+  mySerCmd.Print((char *) "Transmitting base frame: ");
   for(int i = 0; i < sizeof(behavior_control_dock_frame); i++) {
-    String incomingHex = String(behavior_control_dock_frame[i], HEX);
-    incomingHex.toUpperCase();
-    mySerCmd.Print(incomingHex);
+    String outgoingHex = String(behavior_control_dock_frame[i], HEX);
+    outgoingHex.toUpperCase();
+    mySerCmd.Print(outgoingHex);
     mySerCmd.Print((char *) " ");
   }
   mySerCmd.Print((char *) "\r\n");
@@ -374,10 +368,11 @@ void Send_Bump(void) {
   simbumpersignal_frame[sizeof(simbumpersignal_frame)-1] = crcHex[0];
 
   // Display the frame to be sent
+  mySerCmd.Print((char *) "Transmitting base frame: ");
   for(int i = 0; i < sizeof(simbumpersignal_frame); i++) {
-    String incomingHex = String(simbumpersignal_frame[i], HEX);
-    incomingHex.toUpperCase();
-    mySerCmd.Print(incomingHex);
+    String outgoingHex = String(simbumpersignal_frame[i], HEX);
+    outgoingHex.toUpperCase();
+    mySerCmd.Print(outgoingHex);
     mySerCmd.Print((char *) " ");
   }
   mySerCmd.Print((char *) "\r\n");
@@ -414,10 +409,11 @@ void Send_Motor(void) {
   motor_frame[sizeof(motor_frame)-1] = crcHex[0];
 
   // Display the frame to be sent
+  mySerCmd.Print((char *) "Transmitting base frame: ");
   for(int i = 0; i < sizeof(motor_frame); i++) {
-    String incomingHex = String(motor_frame[i], HEX);
-    incomingHex.toUpperCase();
-    mySerCmd.Print(incomingHex);
+    String outgoingHex = String(motor_frame[i], HEX);
+    outgoingHex.toUpperCase();
+    mySerCmd.Print(outgoingHex);
     mySerCmd.Print((char *) " ");
   }
   mySerCmd.Print((char *) "\r\n");
@@ -586,9 +582,8 @@ void set_ANGLE(void) {
   }
 
   // Constrain values to acceptable range
-  jointParam = constrain(jointParam, 0, 6);
-  // float limit = (jointParam < 6 ? 165.0 : 175.0); // fw_arm_controller doesn't differentiate today for this command
-  float limit = 165.0;
+  jointParam = constrain(jointParam, 1, 6);
+  float limit = LIMIT_FOR_ARM_JOINT(jointParam);
   angleParam = constrain(angleParam, -1 * limit, limit);
   speedParam = constrain(speedParam, 0, 100);
 
@@ -596,7 +591,7 @@ void set_ANGLE(void) {
   sprintf(buf, "STATUS: Setting the angle of joint %d to %0.1f degrees at speed %d\r\n", jointParam, angleParam, speedParam);
   mySerCmd.Print(buf);
 
-  uint16_t angleParam16 = (uint16_t)((angleParam + limit) * 10);
+  uint16_t angleParam16 = hb_ftoi(angleParam);
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
   Wire.write(I2C_COMMAND_ARM_ANGLE);
@@ -627,7 +622,7 @@ void set_ANGLES(void) {
 
   // Constrain values to acceptable range
   for (int ndx=0; ndx<6; ndx++) {
-    float limit = (ndx < 5 ? 165.0 : 175.0);
+    float limit = LIMIT_FOR_ARM_JOINT(ndx+1);
     jointParam[ndx] = constrain(jointParam[ndx], -1 * limit, limit);
   }
   speedParam = constrain(speedParam, 0, 100);
@@ -644,8 +639,7 @@ void set_ANGLES(void) {
   Wire.beginTransmission(ARM_I2C_ADDRESS);
   Wire.write(I2C_COMMAND_ARM_ANGLES);
   for (int ndx=0; ndx<6; ndx++) {
-    float limit = (ndx < 5 ? 165.0 : 175.0);
-    uint16_t jointParam16 = (uint16_t)((jointParam[ndx] + limit) * 10);
+    uint16_t jointParam16 = hb_ftoi(jointParam[ndx]);
     Wire.write(highByte(jointParam16)); // Joint Angle H
     Wire.write(lowByte(jointParam16)); // Joint Angle L
   }
@@ -655,68 +649,6 @@ void set_ANGLES(void) {
   sendOK();
 }
 // END ARM CODE ADDED
-
-/* --------------------------------  Compare Left Result  -------------------------------*/
-void compare_left_result(VL53L7CX_ResultsData *Result) {
-  int8_t i, j, k;
-  uint8_t zones_per_line;
-  uint8_t number_of_zones = VL53L7CX_RESOLUTION_4X4;
-  long left_calibration_values[] = {220, 275, 271, 397, 125, 406, 450, 390, 227, 452, 419, 350, 250, 387, 364, 312};
-  long distance_value;
-  long target_status;
-  long compare_value;
-  int object_detected = 0;
-
-  zones_per_line = (number_of_zones == 16) ? 4 : 8;
-
-  for (j = 0; j < number_of_zones; j += zones_per_line) {
-    for (k = (zones_per_line - 1); k >= 0; k--) {
-      distance_value = (long)Result->distance_mm[j+k];
-      target_status = (long)Result->target_status[j+k];
-      compare_value = distance_value - left_calibration_values[j+k];
-      if ((compare_value <= 0) && (distance_value != 0) && (target_status == 5)) {
-        object_detected = 1;
-      }
-    }
-  }
-
-  if (object_detected == 1) {
-    mySerCmd.Print((char *) "STATUS: Left Object Detected!\r\n");
-    Send_Bump();
-  }
-}
-
-
-/* -------------------------------  Compare Right Result  -------------------------------*/
-void compare_right_result(VL53L7CX_ResultsData *Result) {
-  int8_t i, j, k;
-  uint8_t zones_per_line;
-  uint8_t number_of_zones = VL53L7CX_RESOLUTION_4X4;
-  long right_calibration_values[] = {228, 385, 362, 309, 233, 430, 400, 338, 235, 259, 438, 375, 134, 245, 364, 376};
-  long distance_value;
-  long target_status;
-  long compare_value;
-  int object_detected = 0;
-
-  zones_per_line = (number_of_zones == 16) ? 4 : 8;
-
-  for (j = 0; j < number_of_zones; j += zones_per_line) {
-    for (k = (zones_per_line - 1); k >= 0; k--) {
-      distance_value = (long)Result->distance_mm[j+k];
-      target_status = (long)Result->target_status[j+k];
-      compare_value = distance_value - right_calibration_values[j+k];
-      if ((compare_value <= 0) && (distance_value != 0) && (target_status == 5)) {
-        object_detected = 1;
-      }
-    }
-  }
-
-  if (object_detected == 1) {
-    mySerCmd.Print((char *) "STATUS: Right Object Detected!\r\n");
-    Send_Bump();
-  }
-}
-
 
 // ----------------------- setup() -----------------------
 void setup() {
@@ -771,71 +703,57 @@ void setup() {
     mySerCmd.Print((char *) "STATUS: Temperature Sensor Attached\r\n");
   }
 
-  Wire.beginTransmission(41);
+  Wire.beginTransmission(TOFS_LEFT_I2C_ADDRESS);
   if (Wire.endTransmission () == 0) {
-    tofs_attached = 1;
-    mySerCmd.Print((char *) "STATUS: Time of Flight Sensors Attached\r\n");
+    tofs_left_state = TOFS_STATE_ASSIGNED;
+    mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - LEFT DETECTED: ");
+    mySerCmd.Print((char *) STRING_FOR_TOFS_STATE(tofs_left_state));
+    mySerCmd.Print((char *) "\r\n");
   }
 
-  Wire.beginTransmission(90); // Head Mouth Eyes PCBA
+  Wire.beginTransmission(TOFS_RIGHT_I2C_ADDRESS);
+  if (Wire.endTransmission () == 0) {
+    tofs_right_state = TOFS_STATE_ASSIGNED;
+    mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - RIGHT DETECTED: ");
+    mySerCmd.Print((char *) STRING_FOR_TOFS_STATE(tofs_right_state));
+    mySerCmd.Print((char *) "\r\n");
+  }
+
+  Wire.beginTransmission(TOFS_DEFAULT_I2C_ADDRESS);
+  if (Wire.endTransmission () == 0) {
+    if (tofs_left_state != TOFS_STATE_ASSIGNED) {
+      tofs_left_state = TOFS_STATE_UNCONFIGURED;
+    }
+    if (tofs_right_state != TOFS_STATE_ASSIGNED) {
+      tofs_right_state = TOFS_STATE_UNCONFIGURED;
+    }
+    if (tofs_left_state == TOFS_STATE_UNCONFIGURED || tofs_right_state == TOFS_STATE_UNCONFIGURED) {
+      mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - REQUIRE CONFIGURATION\r\n");
+    } else {
+      mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - NEITHER REQUIRES CONFIGURATION, BUT SEEING DEVICE ON DEFAULT ADDRESS?\r\n");
+    }
+  }
+
+  Wire.beginTransmission(AME_I2C_ADDRESS); // Head Mouth Eyes PCBA
   if (Wire.endTransmission () == 0) {
     head_ame_attached = 1;
     mySerCmd.Print((char *) "STATUS: Hackerbot Head Audio/Mouth/Eyes PCBA Attached\r\n");
   }
 
-  Wire.beginTransmission(91); // Dynamixel Contoller PCBA
+  Wire.beginTransmission(DYN_I2C_ADDRESS); // Dynamixel Contoller PCBA
   if (Wire.endTransmission () == 0) {
     head_dyn_attached = 1;
     mySerCmd.Print((char *) "STATUS: Hackerbot Head Dynamixel Controller Attached\r\n");
   }
 
-  Wire.beginTransmission(92); // Arm Controller PCBA
+  Wire.beginTransmission(ARM_I2C_ADDRESS); // Arm Controller PCBA
   if (Wire.endTransmission () == 0) {
     arm_attached = 1;
     mySerCmd.Print((char *) "STATUS: Hackerbot Arm Controller Attached\r\n");
   }
-  
-  // ToF Setup and Configuration (if attached)
-  if (tofs_attached) {
-    mySerCmd.Print((char *) "INFO: Downloading sensor firmware and itializing settings...\r\n");
 
-    // Configure VL53L7CX component.
-    sensor_vl53l7cx_right.begin();
-    mySerCmd.Print((char *) "INFO: Disabling right sensor\r\n");
-    sensor_vl53l7cx_right.vl53l7cx_off();
-
-    delay(100);
-
-    sensor_vl53l7cx_left.begin();
-    
-    mySerCmd.Print((char *) "INFO: Loading left sensor firmware\r\n");
-    sensor_vl53l7cx_left.init_sensor();
-
-    mySerCmd.Print((char *) "INFO: Loading left sensor settings\r\n");
-    sensor_vl53l7cx_left.vl53l7cx_set_resolution(VL53L7CX_RESOLUTION_4X4); // VL53L7CX_RESOLUTION_4X4, VL53L7CX_RESOLUTION_8X8
-    sensor_vl53l7cx_left.vl53l7cx_set_target_order(VL53L7CX_TARGET_ORDER_CLOSEST);
-    sensor_vl53l7cx_left.vl53l7cx_set_ranging_mode(VL53L7CX_RANGING_MODE_CONTINUOUS);
-    sensor_vl53l7cx_left.vl53l7cx_set_ranging_frequency_hz(4);
-    sensor_vl53l7cx_left.vl53l7cx_set_i2c_address(0x54); // 0x52 (0x29), 0x54 (0x2A)
-
-    // Configure VL53L7CX component.
-    mySerCmd.Print((char *) "INFO: Enabling right sensor\r\n");
-    sensor_vl53l7cx_right.vl53l7cx_on();
-
-    mySerCmd.Print((char *) "INFO: Loading right sensor firmware\r\n");
-    sensor_vl53l7cx_right.init_sensor();
-
-    mySerCmd.Print((char *) "INFO: Loading right sensor settings\r\n");
-    sensor_vl53l7cx_right.vl53l7cx_set_resolution(VL53L7CX_RESOLUTION_4X4); // VL53L7CX_RESOLUTION_4X4, VL53L7CX_RESOLUTION_8X8
-    sensor_vl53l7cx_right.vl53l7cx_set_target_order(VL53L7CX_TARGET_ORDER_CLOSEST);
-    sensor_vl53l7cx_right.vl53l7cx_set_ranging_mode(VL53L7CX_RANGING_MODE_CONTINUOUS);
-    sensor_vl53l7cx_right.vl53l7cx_set_ranging_frequency_hz(4);
-
-    mySerCmd.Print((char *) "INFO: Initialization of serial port and sensor is complete. Start ranging.\r\n");
-
-    // Start Measurements
-    sensor_vl53l7cx_right.vl53l7cx_start_ranging();
-    sensor_vl53l7cx_left.vl53l7cx_start_ranging();
+  if (tofs_left_state != TOFS_STATE_ABSENT || tofs_right_state != TOFS_STATE_ABSENT) {
+    tofs_setup();
   }
 
   onboard_pixel.setPixelColor(0, onboard_pixel.Color(0, 0, 10));
@@ -852,30 +770,16 @@ void loop() {
   byte lenByte;
   int8_t ret;
   
-   // Read ToF sensor values and send a simulated bump command if an object is too close (only run if tof sensors are attached)
-   if (tofs_attached) {
-    VL53L7CX_ResultsData Results;
-    uint8_t NewDataReadyRight = 0;
-    uint8_t statusRight;
-    uint8_t NewDataReadyLeft = 0;
-    uint8_t statusLeft;
-
-    do {
-      statusRight = sensor_vl53l7cx_right.vl53l7cx_check_data_ready(&NewDataReadyRight);
-    } while (!NewDataReadyRight);
-
-    if ((!statusRight) && (NewDataReadyRight != 0)) {
-      statusRight = sensor_vl53l7cx_right.vl53l7cx_get_ranging_data(&Results);
-      compare_right_result(&Results);
+  // Read ToF sensor values and send a simulated bump command if an object is too close (only run if tof sensors are attached)
+  if (tofs_left_state == TOFS_STATE_READY || tofs_right_state == TOFS_STATE_READY) {
+    if (check_left_sensor()) {
+      mySerCmd.Print((char *) "STATUS: Left Object Detected!\r\n");
+      Send_Bump();
     }
 
-    do {
-      statusLeft = sensor_vl53l7cx_left.vl53l7cx_check_data_ready(&NewDataReadyLeft);
-    } while (!NewDataReadyLeft);
-
-    if ((!statusLeft) && (NewDataReadyLeft != 0)) {
-      statusLeft = sensor_vl53l7cx_left.vl53l7cx_get_ranging_data(&Results);
-      compare_left_result(&Results);
+    if (check_right_sensor()) {
+      mySerCmd.Print((char *) "STATUS: Right Object Detected!\r\n");
+      Send_Bump();
     }
   }
 
