@@ -76,12 +76,9 @@ void setup() {
   mySerCmd.AddCmd("STOP", SERIALCMD_FROMALL, Send_Stop);
   mySerCmd.AddCmd("BUMP", SERIALCMD_FROMALL, Send_Bump);
   mySerCmd.AddCmd("MOTOR", SERIALCMD_FROMALL, Send_Motor);  
-  mySerCmd.AddCmd("GETMAPLIST", SERIALCMD_FROMALL, Get_MapList);
+  mySerCmd.AddCmd("GETML", SERIALCMD_FROMALL, Get_ML);
   
-  mySerCmd.AddCmd("GETMAP1", SERIALCMD_FROMALL, Get_Map1);
-  mySerCmd.AddCmd("GETMAP2", SERIALCMD_FROMALL, Get_Map2);
-  mySerCmd.AddCmd("GETMAP3", SERIALCMD_FROMALL, Get_Map3);
-  mySerCmd.AddCmd("GETMAP4", SERIALCMD_FROMALL, Get_Map4);
+  mySerCmd.AddCmd("GETMAP", SERIALCMD_FROMALL, Get_Map);
 
   // Head Commands
   mySerCmd.AddCmd("H_IDLE", SERIALCMD_FROMALL, set_IDLE);
@@ -154,7 +151,7 @@ void loop() {
 
 // Get map command - GETMAP1
 // Example - "GETMAP1"
-void Get_Map1(void) {
+void Get_Map(void) {
   byte get_map1_frame[] = {
     0x55, 0xAA, // HEADER_HI, HEADER_LOW
     0x02, // CTRL_ID
@@ -165,73 +162,18 @@ void Get_Map1(void) {
     0x73, 0x84 // CRC_HI, CRC_LOW
   };
 
-  mySerCmd.Print((char *) "Sending get_map1_frame\r\n");
-  Serial1.write(get_map1_frame, sizeof(get_map1_frame));
-
-  for(int i = 0; i < 8; i++) {
-    while(!Serial1.available());
-    byte incomingByte = Serial1.read();
-    String incomingHex = String(incomingByte, HEX);
-    incomingHex.toUpperCase();
-    mySerCmd.Print(incomingHex);
-    mySerCmd.Print((char *) " ");
-  }
-  mySerCmd.Print((char *) "\r\n");
-
-  mySerCmd.Print((char *) "Sending get_map2_frame\r\n");
-  Get_Map2();
-
-  for(int i = 0; i < 39; i++) {
-    while(!Serial1.available());
-    byte incomingByte = Serial1.read();
-    String incomingHex = String(incomingByte, HEX);
-    incomingHex.toUpperCase();
-    mySerCmd.Print(incomingHex);
-    mySerCmd.Print((char *) " ");
-  }
-  mySerCmd.Print((char *) "\r\n");
-
-  mySerCmd.Print((char *) "Sending get_map_frame\r\n");
-  Get_Map3();
-
-  for(int i = 0; i < 11; i++) {
-    while(!Serial1.available());
-    byte incomingByte = Serial1.read();
-    String incomingHex = String(incomingByte, HEX);
-    incomingHex.toUpperCase();
-    mySerCmd.Print(incomingHex);
-    mySerCmd.Print((char *) " ");
-  }
-  mySerCmd.Print((char *) "\r\n");
-
-  mySerCmd.Print((char *) "Sending get_map4_frame\r\n");
-  Get_Map4();
-
-  sendOK();
-}
-
-// Send CTRL_OTA_START_RESP packet - GETMAP2
-// Example - "GETMAP2"
-void Get_Map2(void) {
   byte get_map2_frame[] = {
     0x55, 0xAA, // HEADER_HI, HEADER_LOW
     0x2F, // CTRL_ID_RESP
     0x00, 0x17, // LEN_HI, LEN_LOW
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // no_use0
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // no_use1
-    0x00, 0x28, 0x00, 0x00, // file_limit
-    0x7F, 0x00, // packet_size
+    0x00, 0x28, 0x00, 0x00, // file_limit = 10240
+    0x40, 0x00, // packet_size = 64
     0x00, // no_use2
     0x81, 0x74 // CRC_HI, CRC_LOW
   };
-  Serial1.write(get_map2_frame, sizeof(get_map2_frame));
 
-  //sendOK();
-}
-
-// Send CTRL_OTA_FILE_INFO_RESP packet - GETMAP3
-// Example - "GETMAP3"
-void Get_Map3(void) {
   byte get_map3_frame[] = {
     0x55, 0xAA, // HEADER_HI, HEADER_LOW
     0x30, // CTRL_ID_RESP
@@ -241,14 +183,7 @@ void Get_Map3(void) {
     0x00, 0x00, 0x00, 0x00, // last_crc32
     0x7C, 0xFE // CRC_HI, CRC_LOW
   };
-  Serial1.write(get_map3_frame, sizeof(get_map3_frame));
 
-  //sendOK();
-}
-
-// Send CTRL_OTA_FILE_POS_RESP packet - GETMAP4
-// Example - "GETMAP4"
-void Get_Map4(void) {
   byte get_map4_frame[] = {
     0x55, 0xAA, // HEADER_HI, HEADER_LOW
     0x31, // CTRL_ID_RESP
@@ -256,13 +191,26 @@ void Get_Map4(void) {
     0x00, 0x00, 0x00, 0x00, // last_offset
     0x68, 0xEA // CRC_HI, CRC_LOW
   };
-  Serial1.write(get_map4_frame, sizeof(get_map4_frame));
 
-  //sendOK();
+  Send_Frame(get_map1_frame, sizeof(get_map1_frame));
+  Get_Packet(get_map1_frame[5]);
+
+  // Send CTRL_OTA_START_RESP packet - GETMAP2
+  Send_Frame(get_map2_frame, sizeof(get_map2_frame));
+  Get_Packet();
+
+  // Send CTRL_OTA_FILE_INFO_RESP packet - GETMAP3
+  //Send_Frame(get_map3_frame, sizeof(get_map3_frame));
+  //Get_Packet();
+
+  // Send CTRL_OTA_FILE_POS_RESP packet - GETMAP4
+  //Send_Frame(get_map4_frame, sizeof(get_map4_frame));
+  //Get_Packet();
+
+
+
+  sendOK();
 }
-
-
-
 
 
 
@@ -420,8 +368,8 @@ void Send_Mode(void) {
 
 
 // Gets a list of all of the maps stored on the robot
-// Example - "GETMAPLIST"
-void Get_MapList(void) {
+// Example - "GETML"
+void Get_ML(void) {
   mySerCmd.Print((char *) "INFO: Sending get_map_list_frame\r\n");
   Send_Frame(get_map_list_frame, sizeof(get_map_list_frame));
 
@@ -433,6 +381,8 @@ void Get_MapList(void) {
 // Set mode to enter. This moves the robot off the dock and starts the LiDAR
 // Example - "ENTER"
 void Send_Enter(void) {
+  behavior_control_frame[7] = 0x00;
+
   mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (ENTER)\r\n");
   Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
 
@@ -509,6 +459,8 @@ void Send_Goto(void) {
   memcpy(yParamHex, &yParam, sizeof(yParamHex));
   memcpy(aParamHex, &aParam, sizeof(aParamHex));
   memcpy(sParamHex, &sParam, sizeof(sParamHex));
+
+  behavior_control_frame[7] = 0x04;
 
   behavior_control_frame[9]  = xParamHex[0];
   behavior_control_frame[10] = xParamHex[1];
@@ -1038,7 +990,7 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
 
 void Send_Frame(byte frame[], int sizeOfFrame) {
   uint8_t crcHex[2];
-  uint16_t crc = crc16(&frame[2], sizeOfFrame - 4);
+  uint16_t crc = crc16_compute(&frame[2], sizeOfFrame - 4);
 
   char hexString[3];
   const char hexChars[] = "0123456789ABCDEF";
@@ -1107,11 +1059,29 @@ static unsigned short const crc16_table[256] = {
 };
 
 
-static uint16_t crc16(byte *data, uint16_t length) {
+static uint16_t crc16_compute(byte *data, uint16_t length) {
   uint16_t crc = 0;
   while (length--) {
       crc = (crc << 8) ^ crc16_table[((crc >> 8) ^ *data++) & 0x00FF];
   }
 
   return crc;
+}
+
+// -------------------------------------------------------
+// CRC-32 Function
+// -------------------------------------------------------
+uint32_t crc32_compute(uint8_t const *p_data, uint32_t size, uint32_t const *p_crc)
+{
+    uint32_t crc;
+    crc = (p_crc == NULL) ? 0xFFFFFFFF : ~(*p_crc);
+    for (uint32_t i = 0; i < size; i++)
+    {
+        crc = crc ^ p_data[i];
+        for (uint32_t j = 8; j > 0; j--)
+        {
+            crc = (crc >> 1) ^ (0xEDB88320U & ((crc & 1) ? 0xFFFFFFFF : 0));
+        }
+    }
+    return ~crc;
 }
