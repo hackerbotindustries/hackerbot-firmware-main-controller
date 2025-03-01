@@ -42,7 +42,7 @@ bool temperature_sensor_attached = false;
 
 // Function prototypes
 void Get_Packet(byte response_packetid = 0x00, byte response_frame[] = nullptr, int sizeOfResponseFrame = 0);
-//void Get_File_Transfer_Packet(byte request_ctrlid = 0x00);
+void Get_File_Transfer_Packet(byte request_ctrlid = 0x00);
 
 
 // -------------------------------------------------------
@@ -193,23 +193,29 @@ void Get_Map(void) {
     0x68, 0xEA // CRC_HI, CRC_LOW
   };
 
+  mySerCmd.Print((char *) "INFO: Sending get_map_frame\r\n");
   Send_Frame(get_map1_frame, sizeof(get_map1_frame));
   Get_Packet(get_map1_frame[5]);
 
   //Get_File_Transfer_Packet(0x0F);
 
   // Send CTRL_OTA_START_RESP packet - GETMAP2
+  mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_START_RESP\r\n");
   Send_Frame(get_map2_frame, sizeof(get_map2_frame));
+  Get_File_Transfer_Packet(0x10);
   //Get_Packet();
 
   // Send CTRL_OTA_FILE_INFO_RESP packet - GETMAP3
-  //Send_Frame(get_map3_frame, sizeof(get_map3_frame));
+  mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_INFO_RESP\r\n");
+  Send_Frame(get_map3_frame, sizeof(get_map3_frame));
+  Get_File_Transfer_Packet(0x11);
   //Get_Packet();
 
   // Send CTRL_OTA_FILE_POS_RESP packet - GETMAP4
-  //Send_Frame(get_map4_frame, sizeof(get_map4_frame));
+  mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_POS_RESP\r\n");
+  Send_Frame(get_map4_frame, sizeof(get_map4_frame));
+  Get_File_Transfer_Packet(0x12);
   //Get_Packet();
-
 
 
   sendOK();
@@ -336,10 +342,12 @@ void Send_Handshake(void) {
   mySerCmd.Print((char *) "INFO: Sending handshake_frame\r\n");
   Send_Frame_Get_Response(handshake_frame, sizeof(handshake_frame), response, sizeof(response));
 
+  response[2] = 0x02;
+
   mySerCmd.Print((char *) "INFO: Sending handshake acknowledgement frame\r\n");
   Send_Frame(response, sizeof(response));
 
-  //Get_Packet(response[5]);
+  Get_Packet(response[5]);
   sendOK();
 }
 
@@ -958,12 +966,15 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
       return;
     }
 
-    if (incomingPacket[5] == response_packetid) {
-      responseByteReceived = true;
-    } else {
-      incomingPacket[0] = 0x00;
-      incomingPacket[1] = 0x00;
-      incomingPacketLen = 0;
+    // If we're looking for a specific response packet, check to see if we got that packet 
+    if (response_packetid != 0x00) {
+      if (incomingPacket[5] == response_packetid) {
+        responseByteReceived = true;
+      } else {
+        incomingPacket[0] = 0x00;
+        incomingPacket[1] = 0x00;
+        incomingPacketLen = 0;
+      }
     }
   }
 
@@ -991,7 +1002,7 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
   }
 }
 
-/*
+
 // Get the request packet for a file transfer
 void Get_File_Transfer_Packet(byte request_ctrlid) {
   unsigned long responseTimeout = millis();
@@ -1109,8 +1120,19 @@ void Get_File_Transfer_Packet(byte request_ctrlid) {
 
     lenByte = (lenByteHigh << 8) | lenByteLow;
 
+    byte offset = 0;
+
+    if (ctrlID == 0x03) {
+      offset = 2;
+    }
+
+    // File transfer DATA packet with CRC32
+    if (ctrlID == 0x12) {
+      offset = 4;
+    }
+
     // Wait for and receive the remaining packet data
-    for (int i = 0; i < (lenByte); i++) {
+    for (int i = 0; i < (lenByte + offset); i++) {
       while(!Serial1.available()) {
         if(millis() - responseTimeout >= response_timeout_period) {
             mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the DATA or CRC in the response packet\r\n");
@@ -1170,7 +1192,7 @@ void Get_File_Transfer_Packet(byte request_ctrlid) {
   //  mySerCmd.Print((char *) "WARNING: Length of the frame received does not match the length that was specified\r\n");
   //}
   //}
-}*/
+}
 
 
 // Sends a frame
