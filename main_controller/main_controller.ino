@@ -42,6 +42,7 @@ bool temperature_sensor_attached = false;
 
 // Function prototypes
 void Get_Packet(byte response_packetid = 0x00, byte response_frame[] = nullptr, int sizeOfResponseFrame = 0);
+//void Get_File_Transfer_Packet(byte request_ctrlid = 0x00);
 
 
 // -------------------------------------------------------
@@ -195,9 +196,11 @@ void Get_Map(void) {
   Send_Frame(get_map1_frame, sizeof(get_map1_frame));
   Get_Packet(get_map1_frame[5]);
 
+  //Get_File_Transfer_Packet(0x0F);
+
   // Send CTRL_OTA_START_RESP packet - GETMAP2
   Send_Frame(get_map2_frame, sizeof(get_map2_frame));
-  Get_Packet();
+  //Get_Packet();
 
   // Send CTRL_OTA_FILE_INFO_RESP packet - GETMAP3
   //Send_Frame(get_map3_frame, sizeof(get_map3_frame));
@@ -333,15 +336,10 @@ void Send_Handshake(void) {
   mySerCmd.Print((char *) "INFO: Sending handshake_frame\r\n");
   Send_Frame_Get_Response(handshake_frame, sizeof(handshake_frame), response, sizeof(response));
 
-  if (response[5] == 0x01) {
-    response[2] = 0x02;
+  mySerCmd.Print((char *) "INFO: Sending handshake acknowledgement frame\r\n");
+  Send_Frame(response, sizeof(response));
 
-    mySerCmd.Print((char *) "INFO: Sending handshake acknowledgement frame\r\n");
-    Send_Frame(response, sizeof(response));
-  } else {
-    mySerCmd.Print((char *) "WARNING: INIT has already been performed\r\n");
-  }
-
+  //Get_Packet(response[5]);
   sendOK();
 }
 
@@ -363,6 +361,7 @@ void Send_Mode(void) {
   mySerCmd.Print((char *) "INFO: Sending mode_control_frame\r\n");
   Send_Frame(mode_control_frame, sizeof(mode_control_frame));
 
+  Get_Packet(mode_control_frame[5]);
   sendOK();
 }
 
@@ -386,6 +385,7 @@ void Send_Enter(void) {
   mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (ENTER)\r\n");
   Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
 
+  Get_Packet(behavior_control_frame[5]);
   sendOK();
 }
 
@@ -398,6 +398,7 @@ void Send_QuickMap(void) {
   mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (QUICKMAP)\r\n");
   Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
 
+  Get_Packet(behavior_control_frame[5]);
   sendOK();
 }
 
@@ -410,6 +411,7 @@ void Send_Dock(void) {
   mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (DOCK)\r\n");
   Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
 
+  Get_Packet(behavior_control_frame[5]);
   sendOK();
 }
 
@@ -422,6 +424,7 @@ void Send_Stop(void) {
   mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (STOP)\r\n");
   Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
 
+  Get_Packet(behavior_control_frame[5]);
   sendOK();
 }
 
@@ -485,6 +488,7 @@ void Send_Goto(void) {
   mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (GOTO)\r\n");
   Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
 
+  Get_Packet(behavior_control_frame[5]);
   sendOK();
 }
 
@@ -987,7 +991,189 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
   }
 }
 
+/*
+// Get the request packet for a file transfer
+void Get_File_Transfer_Packet(byte request_ctrlid) {
+  unsigned long responseTimeout = millis();
+  const int response_timeout_period = 5000;
 
+  const int incomingPacketBuffSize = 320;
+  uint8_t incomingByte;
+  uint8_t incomingPacket[incomingPacketBuffSize] = {0};
+  int incomingPacketLen = 0;
+  uint8_t lenByteHigh;
+  uint8_t lenByteLow;
+  uint16_t lenByte;
+  uint8_t ctrlID;
+
+  bool requestByteReceived = false;
+
+  char hexString[3];
+  const char hexChars[] = "0123456789ABCDEF";
+
+  while (!requestByteReceived) {
+    // If the Get_Packet function is called but the user doesn't care what PACKETID the response has, then only read
+    // and display one packet. Otherwise, keep reading packets until the one with the requested PACKET_ID comes in
+    if (request_ctrlid == 0x00) {
+      requestByteReceived = true;
+    }
+
+    while (incomingPacket[0] != 0x55 && incomingPacket[1] != 0xAA) {
+      while (!Serial1.available()) {
+        if (millis() - responseTimeout >= response_timeout_period) {
+            mySerCmd.Print((char *) "WARNING: Timed out while waiting for the first header byte in the response packet (0x55)\r\n");
+            return;
+        }
+      }
+
+      incomingByte = Serial1.read();
+      incomingPacket[incomingPacketLen] = incomingByte;
+
+      if (incomingPacket[incomingPacketLen] != 0x55) {
+        if (requestByteReceived) {
+          mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0x55) ");
+          hexString[0] = hexChars[incomingPacket[incomingPacketLen] >> 4];
+          hexString[1] = hexChars[incomingPacket[incomingPacketLen] & 0x0F];
+          hexString[2] = '\0';
+          mySerCmd.Print(hexString);
+          mySerCmd.Print((char *) "\r\n");
+        }
+      } else {
+        incomingPacketLen++;
+        
+        while (!Serial1.available()) {
+          if (millis() - responseTimeout >= response_timeout_period) {
+            mySerCmd.Print((char *) "WARNING: Timed out while waiting for the second header byte in the response packet (0xAA)\r\n");
+            return;
+          }
+        }
+
+        incomingByte = Serial1.read();
+        incomingPacket[incomingPacketLen] = incomingByte;
+
+        if(incomingPacket[incomingPacketLen] != 0xAA) {
+          if (requestByteReceived) {
+            mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0xAA) ");
+            hexString[0] = hexChars[incomingPacket[incomingPacketLen] >> 4];
+            hexString[1] = hexChars[incomingPacket[incomingPacketLen] & 0x0F];
+            hexString[2] = '\0';
+            mySerCmd.Print(hexString);
+            mySerCmd.Print((char *) "\r\n");
+          }
+
+          incomingPacketLen = 0;
+        }
+      }
+    }
+
+    incomingPacketLen++;
+
+    // Wait for and receive the CTRL_ID
+    while(!Serial1.available()) {
+      if(millis() - responseTimeout >= response_timeout_period) {
+          mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the CTRL_ID in the response packet\r\n");
+          return;
+      }
+    }
+
+    incomingByte = Serial1.read();
+    incomingPacket[incomingPacketLen] = incomingByte;
+    ctrlID = incomingPacket[incomingPacketLen];
+    incomingPacketLen++;
+
+    // Wait for and receive the LEN_HI
+    while(!Serial1.available()) {
+      if(millis() - responseTimeout >= response_timeout_period) {
+          mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the LEN_HI in the response packet\r\n");
+          return;
+      }
+    }
+
+    incomingByte = Serial1.read();
+    incomingPacket[incomingPacketLen] = incomingByte;
+    lenByteHigh = incomingPacket[incomingPacketLen];
+    incomingPacketLen++;
+
+    // Wait for and receive the LEN_LOW
+    while(!Serial1.available()) {
+      if(millis() - responseTimeout >= response_timeout_period) {
+          mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the LEN_LOW in the response packet\r\n");
+          return;
+      }
+    }
+
+    incomingByte = Serial1.read();
+    incomingPacket[incomingPacketLen] = incomingByte;
+    lenByteLow = incomingPacket[incomingPacketLen];
+    incomingPacketLen++;
+
+    lenByte = (lenByteHigh << 8) | lenByteLow;
+
+    // Wait for and receive the remaining packet data
+    for (int i = 0; i < (lenByte); i++) {
+      while(!Serial1.available()) {
+        if(millis() - responseTimeout >= response_timeout_period) {
+            mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the DATA or CRC in the response packet\r\n");
+            return;
+        }
+      }
+
+      if (lenByte <= (incomingPacketBuffSize - 5)) {
+        incomingByte = Serial1.read();
+        incomingPacket[incomingPacketLen] = incomingByte;
+        incomingPacketLen++;
+      } else {
+        incomingByte = Serial1.read();
+      }
+    }
+
+    if (lenByte > (incomingPacketBuffSize - 5)) {
+      mySerCmd.Print((char *) "WARNING: Packet length is too long for the incomingPacket buffer. Throwing out ");
+      mySerCmd.Print(lenByte + 7);
+      mySerCmd.Print((char *) " bytes from CTRL_ID 0x");
+      hexString[0] = hexChars[ctrlID >> 4];
+      hexString[1] = hexChars[ctrlID & 0x0F];
+      hexString[2] = '\0';
+      mySerCmd.Print(hexString);
+      mySerCmd.Print((char *) "\r\n");
+      return;
+    }
+
+    if (incomingPacket[2] == request_ctrlid) {
+      requestByteReceived = true;
+    } else {
+      incomingPacket[0] = 0x00;
+      incomingPacket[1] = 0x00;
+      incomingPacketLen = 0;
+    }
+  }
+
+  mySerCmd.Print((char *) "INFO: FP Received ");
+  for (int i = 0; i < incomingPacketLen; i++) {
+    //if (response_frame != nullptr) {
+    //  if (i < sizeOfResponseFrame) {
+    //    response_frame[i] = incomingPacket[i];
+    //  }
+    //}
+    hexString[0] = hexChars[incomingPacket[i] >> 4];
+    hexString[1] = hexChars[incomingPacket[i] & 0x0F];
+    hexString[2] = '\0';
+    mySerCmd.Print(hexString);
+    mySerCmd.Print((char *) " ");
+  }
+  mySerCmd.Print((char *) " (");
+  mySerCmd.Print(incomingPacketLen);
+  mySerCmd.Print((char *) ")\r\n");
+
+  //if (response_frame != nullptr) {
+  //if (incomingPacketLen != sizeOfResponseFrame) {
+  //  mySerCmd.Print((char *) "WARNING: Length of the frame received does not match the length that was specified\r\n");
+  //}
+  //}
+}*/
+
+
+// Sends a frame
 void Send_Frame(byte frame[], int sizeOfFrame) {
   uint8_t crcHex[2];
   uint16_t crc = crc16_compute(&frame[2], sizeOfFrame - 4);
@@ -1012,7 +1198,7 @@ void Send_Frame(byte frame[], int sizeOfFrame) {
   Serial1.write(frame, sizeOfFrame);
 }
 
-
+// Sends a frame and then saves the response frame with the matching packet id
 void Send_Frame_Get_Response(byte frame[], int sizeOfFrame, byte response_frame[], int sizeOfResponseFrame) {
   Send_Frame(frame, sizeOfFrame);
   Get_Packet(frame[5], response_frame, sizeOfResponseFrame);
