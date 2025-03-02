@@ -42,7 +42,7 @@ bool temperature_sensor_attached = false;
 
 // Function prototypes
 void Get_Packet(byte response_packetid = 0x00, byte response_frame[] = nullptr, int sizeOfResponseFrame = 0);
-void Get_File_Transfer_Packet(byte request_ctrlid = 0x00);
+void Get_File_Transfer_Packet(byte request_ctrlid = 0x00, uint32_t* currentCRC32 = nullptr, uint32_t* lastCRC32 = nullptr, uint8_t* doneFlag = nullptr);
 
 
 // -------------------------------------------------------
@@ -150,9 +150,13 @@ void loop() {
 
 
 
-// Get map command - GETMAP1
-// Example - "GETMAP1"
+// Get map command - GETMAP
+// Example - "GETMAP"
 void Get_Map(void) {
+  uint32_t currentCRC32;
+  uint32_t lastCRC32;
+  uint8_t doneFlag = 0;
+
   byte get_map1_frame[] = {
     0x55, 0xAA, // HEADER_HI, HEADER_LOW
     0x02, // CTRL_ID
@@ -169,7 +173,7 @@ void Get_Map(void) {
     0x00, 0x17, // LEN_HI, LEN_LOW
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // no_use0
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // no_use1
-    0x00, 0x28, 0x00, 0x00, // file_limit = 10240
+    0x00, 0x80, 0x00, 0x00, // file_limit = 32768
     0x40, 0x00, // packet_size = 64
     0x00, // no_use2
     0x81, 0x74 // CRC_HI, CRC_LOW
@@ -193,6 +197,14 @@ void Get_Map(void) {
     0x68, 0xEA // CRC_HI, CRC_LOW
   };
 
+  byte get_map5_frame[] = {
+    0x55, 0xAA, // HEADER_HI, HEADER_LOW
+    0x32, // CTRL_ID_RESP
+    0x00, 0x04, // LEN_HI, LEN_LOW
+    0x24, 0xA5, 0xCE, 0xFC, // crc32
+    0x00, 0x73 // CRC_HI, CRC_LOW
+  };
+
   mySerCmd.Print((char *) "INFO: Sending get_map_frame\r\n");
   Send_Frame(get_map1_frame, sizeof(get_map1_frame));
   Get_Packet(get_map1_frame[5]);
@@ -203,20 +215,32 @@ void Get_Map(void) {
   mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_START_RESP\r\n");
   Send_Frame(get_map2_frame, sizeof(get_map2_frame));
   Get_File_Transfer_Packet(0x10);
-  //Get_Packet();
+
 
   // Send CTRL_OTA_FILE_INFO_RESP packet - GETMAP3
   mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_INFO_RESP\r\n");
   Send_Frame(get_map3_frame, sizeof(get_map3_frame));
   Get_File_Transfer_Packet(0x11);
-  //Get_Packet();
+
 
   // Send CTRL_OTA_FILE_POS_RESP packet - GETMAP4
   mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_POS_RESP\r\n");
   Send_Frame(get_map4_frame, sizeof(get_map4_frame));
-  Get_File_Transfer_Packet(0x12);
-  //Get_Packet();
+  Get_File_Transfer_Packet(0x12, &currentCRC32);
 
+  while (doneFlag == 0) {
+    lastCRC32 = currentCRC32;
+
+    get_map5_frame[5] = currentCRC32 & 0xFF;
+    get_map5_frame[6] = (currentCRC32 >> 8) & 0xFF;
+    get_map5_frame[7] = (currentCRC32 >> 16) & 0xFF;
+    get_map5_frame[8] = (currentCRC32 >> 24) & 0xFF;
+
+    // Send CTRL_OTA_FILE_DATA_RESP packet - GETMAP5
+   // mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_DATA_RESP\r\n");
+    Send_Frame(get_map5_frame, sizeof(get_map5_frame));
+    Get_File_Transfer_Packet(0x12, &currentCRC32, &lastCRC32, &doneFlag);
+  }
 
   sendOK();
 }
@@ -1004,7 +1028,7 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
 
 
 // Get the request packet for a file transfer
-void Get_File_Transfer_Packet(byte request_ctrlid) {
+void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint32_t* lastCRC32, uint8_t* doneFlag) {
   unsigned long responseTimeout = millis();
   const int response_timeout_period = 5000;
 
@@ -1120,15 +1144,15 @@ void Get_File_Transfer_Packet(byte request_ctrlid) {
 
     lenByte = (lenByteHigh << 8) | lenByteLow;
 
-    byte offset = 0;
-
-    if (ctrlID == 0x03) {
-      offset = 2;
-    }
+    byte offset = 2;
 
     // File transfer DATA packet with CRC32
     if (ctrlID == 0x12) {
-      offset = 4;
+      offset = 2;
+    }
+
+    if (ctrlID == 0x13) {
+      *doneFlag = 1;
     }
 
     // Wait for and receive the remaining packet data
@@ -1140,7 +1164,7 @@ void Get_File_Transfer_Packet(byte request_ctrlid) {
         }
       }
 
-      if (lenByte <= (incomingPacketBuffSize - 5)) {
+      if (lenByte <= (incomingPacketBuffSize - 5 - offset)) {
         incomingByte = Serial1.read();
         incomingPacket[incomingPacketLen] = incomingByte;
         incomingPacketLen++;
@@ -1149,7 +1173,7 @@ void Get_File_Transfer_Packet(byte request_ctrlid) {
       }
     }
 
-    if (lenByte > (incomingPacketBuffSize - 5)) {
+    if (lenByte > (incomingPacketBuffSize - 5 - offset)) {
       mySerCmd.Print((char *) "WARNING: Packet length is too long for the incomingPacket buffer. Throwing out ");
       mySerCmd.Print(lenByte + 7);
       mySerCmd.Print((char *) " bytes from CTRL_ID 0x");
@@ -1170,28 +1194,39 @@ void Get_File_Transfer_Packet(byte request_ctrlid) {
     }
   }
 
-  mySerCmd.Print((char *) "INFO: FP Received ");
-  for (int i = 0; i < incomingPacketLen; i++) {
-    //if (response_frame != nullptr) {
-    //  if (i < sizeOfResponseFrame) {
-    //    response_frame[i] = incomingPacket[i];
-    //  }
-    //}
-    hexString[0] = hexChars[incomingPacket[i] >> 4];
-    hexString[1] = hexChars[incomingPacket[i] & 0x0F];
-    hexString[2] = '\0';
-    mySerCmd.Print(hexString);
-    mySerCmd.Print((char *) " ");
+  if (incomingPacket[2] != 0x12) {
+    mySerCmd.Print((char *) "INFO: FP Received ");
+    for (int i = 0; i < incomingPacketLen; i++) {
+      hexString[0] = hexChars[incomingPacket[i] >> 4];
+      hexString[1] = hexChars[incomingPacket[i] & 0x0F];
+      hexString[2] = '\0';
+      mySerCmd.Print(hexString);
+      mySerCmd.Print((char *) " ");
+    }
+    mySerCmd.Print((char *) " (");
+    mySerCmd.Print(incomingPacketLen);
+    mySerCmd.Print((char *) ")\r\n");
+  } else {
+    //mySerCmd.Print((char *) "INFO: FP Received ");
+    for (int i = 7; i < incomingPacketLen - 2; i++) {
+      hexString[0] = hexChars[incomingPacket[i] >> 4];
+      hexString[1] = hexChars[incomingPacket[i] & 0x0F];
+      hexString[2] = '\0';
+      mySerCmd.Print(hexString);
+      //mySerCmd.Print((char *) " ");
+    }
   }
-  mySerCmd.Print((char *) " (");
-  mySerCmd.Print(incomingPacketLen);
-  mySerCmd.Print((char *) ")\r\n");
 
-  //if (response_frame != nullptr) {
-  //if (incomingPacketLen != sizeOfResponseFrame) {
-  //  mySerCmd.Print((char *) "WARNING: Length of the frame received does not match the length that was specified\r\n");
-  //}
-  //}
+  if (incomingPacket[2] == 0x12 && currentCRC32 != nullptr) {
+    uint32_t crc32;
+
+    if (lastCRC32 == nullptr) {
+      crc32 = crc32_compute(&incomingPacket[7], incomingPacketLen - 9, NULL);
+    } else {
+      crc32 = crc32_compute(&incomingPacket[7], incomingPacketLen - 9, lastCRC32);
+    }
+    *currentCRC32 = crc32;
+  }
 }
 
 
@@ -1207,15 +1242,17 @@ void Send_Frame(byte frame[], int sizeOfFrame) {
   frame[sizeOfFrame - 2] = crcHex[1];
   frame[sizeOfFrame - 1] = crcHex[0];
 
-  mySerCmd.Print((char *) "INFO: Transmitted ");
-  for(int i = 0; i < sizeOfFrame; i++) {
-    hexString[0] = hexChars[frame[i] >> 4];
-    hexString[1] = hexChars[frame[i] & 0x0F];
-    hexString[2] = '\0';
-    mySerCmd.Print(hexString);
-    mySerCmd.Print((char *) " ");
+  if (frame[2] != 0x32) {
+    mySerCmd.Print((char *) "INFO: Transmitted ");
+    for(int i = 0; i < sizeOfFrame; i++) {
+      hexString[0] = hexChars[frame[i] >> 4];
+      hexString[1] = hexChars[frame[i] & 0x0F];
+      hexString[2] = '\0';
+      mySerCmd.Print(hexString);
+      mySerCmd.Print((char *) " ");
+    }
+    mySerCmd.Print((char *) "\r\n");
   }
-  mySerCmd.Print((char *) "\r\n");
 
   Serial1.write(frame, sizeOfFrame);
 }
