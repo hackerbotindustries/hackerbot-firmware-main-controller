@@ -147,106 +147,6 @@ void loop() {
 }
 
 
-
-
-
-// Get map command - GETMAP
-// Example - "GETMAP"
-void Get_Map(void) {
-  uint32_t currentCRC32;
-  uint32_t lastCRC32;
-  uint8_t doneFlag = 0;
-
-  byte get_map1_frame[] = {
-    0x55, 0xAA, // HEADER_HI, HEADER_LOW
-    0x02, // CTRL_ID
-    0x00, 0x06, // LEN_HI, LEN_LOW
-    0x21, // PACKET_ID
-    0x04, // PACKET_LEN
-    0x02, 0x00, 0x00, 0x00, // map_id
-    0x73, 0x84 // CRC_HI, CRC_LOW
-  };
-
-  byte get_map2_frame[] = {
-    0x55, 0xAA, // HEADER_HI, HEADER_LOW
-    0x2F, // CTRL_ID_RESP
-    0x00, 0x17, // LEN_HI, LEN_LOW
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // no_use0
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // no_use1
-    0x00, 0x80, 0x00, 0x00, // file_limit = 32768
-    0x40, 0x00, // packet_size = 64
-    0x00, // no_use2
-    0x81, 0x74 // CRC_HI, CRC_LOW
-  };
-
-  byte get_map3_frame[] = {
-    0x55, 0xAA, // HEADER_HI, HEADER_LOW
-    0x30, // CTRL_ID_RESP
-    0x00, 0x09, // LEN_HI, LEN_LOW
-    0x00, // stat
-    0x00, 0x00, 0x00, 0x00, // last_offset
-    0x00, 0x00, 0x00, 0x00, // last_crc32
-    0x7C, 0xFE // CRC_HI, CRC_LOW
-  };
-
-  byte get_map4_frame[] = {
-    0x55, 0xAA, // HEADER_HI, HEADER_LOW
-    0x31, // CTRL_ID_RESP
-    0x00, 0x04, // LEN_HI, LEN_LOW
-    0x00, 0x00, 0x00, 0x00, // last_offset
-    0x68, 0xEA // CRC_HI, CRC_LOW
-  };
-
-  byte get_map5_frame[] = {
-    0x55, 0xAA, // HEADER_HI, HEADER_LOW
-    0x32, // CTRL_ID_RESP
-    0x00, 0x04, // LEN_HI, LEN_LOW
-    0x24, 0xA5, 0xCE, 0xFC, // crc32
-    0x00, 0x73 // CRC_HI, CRC_LOW
-  };
-
-  mySerCmd.Print((char *) "INFO: Sending get_map_frame\r\n");
-  Send_Frame(get_map1_frame, sizeof(get_map1_frame));
-  Get_Packet(get_map1_frame[5]);
-
-  //Get_File_Transfer_Packet(0x0F);
-
-  // Send CTRL_OTA_START_RESP packet - GETMAP2
-  mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_START_RESP\r\n");
-  Send_Frame(get_map2_frame, sizeof(get_map2_frame));
-  Get_File_Transfer_Packet(0x10);
-
-
-  // Send CTRL_OTA_FILE_INFO_RESP packet - GETMAP3
-  mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_INFO_RESP\r\n");
-  Send_Frame(get_map3_frame, sizeof(get_map3_frame));
-  Get_File_Transfer_Packet(0x11);
-
-
-  // Send CTRL_OTA_FILE_POS_RESP packet - GETMAP4
-  mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_POS_RESP\r\n");
-  Send_Frame(get_map4_frame, sizeof(get_map4_frame));
-  Get_File_Transfer_Packet(0x12, &currentCRC32);
-
-  while (doneFlag == 0) {
-    lastCRC32 = currentCRC32;
-
-    get_map5_frame[5] = currentCRC32 & 0xFF;
-    get_map5_frame[6] = (currentCRC32 >> 8) & 0xFF;
-    get_map5_frame[7] = (currentCRC32 >> 16) & 0xFF;
-    get_map5_frame[8] = (currentCRC32 >> 24) & 0xFF;
-
-    // Send CTRL_OTA_FILE_DATA_RESP packet - GETMAP5
-   // mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_DATA_RESP\r\n");
-    Send_Frame(get_map5_frame, sizeof(get_map5_frame));
-    Get_File_Transfer_Packet(0x12, &currentCRC32, &lastCRC32, &doneFlag);
-  }
-
-  sendOK();
-}
-
-
-
 // -------------------------------------------------------
 // General SerialCmd Functions
 // -------------------------------------------------------
@@ -587,6 +487,70 @@ void Send_Motor(void) {
 
   mySerCmd.Print((char *) "INFO: Sending wheel_motor_frame\r\n");
   Send_Frame(wheel_motor_frame, sizeof(wheel_motor_frame));
+
+  sendOK();
+}
+
+
+// Get map command. Must have a map created first.
+// Parameters
+// int: map_id
+// Example - "GETMAP,2"
+void Get_Map(void) {
+  uint8_t mapIdParam = 0;
+  
+  byte getMapFrameResponse[13];
+  uint32_t currentCRC32;
+  uint32_t lastCRC32;
+  uint8_t doneFlag = 0;
+  
+  if (!mySerCmd.ReadNextUInt8(&mapIdParam)) {
+    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    return;
+  }
+
+  // Constrain values to acceptable range and set the value into the frame
+  mapIdParam = constrain(mapIdParam, 1, 10);
+  get_map_frame[7] = mapIdParam;
+
+  mySerCmd.Print((char *) "INFO: Sending get_map_frame\r\n");
+  Send_Frame_Get_Response(get_map_frame, sizeof(get_map_frame), getMapFrameResponse, sizeof(getMapFrameResponse));
+
+  if (getMapFrameResponse[7] == 0xFF && getMapFrameResponse[8] == 0xFF && getMapFrameResponse[9] == 0xFF && getMapFrameResponse[10] == 0xFF) {
+    mySerCmd.Print((char *) "ERROR: Invalid map id!\r\n");
+    return;
+  }
+
+  // Send CTRL_OTA_START_RESP packet - GETMAP2
+  mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_START_RESP\r\n");
+  Send_Frame(ctrl_ota_start_resp_frame, sizeof(ctrl_ota_start_resp_frame));
+  Get_File_Transfer_Packet(0x10);
+
+
+  // Send CTRL_OTA_FILE_INFO_RESP packet - GETMAP3
+  mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_INFO_RESP\r\n");
+  Send_Frame(ctrl_ota_file_info_resp_frame, sizeof(ctrl_ota_file_info_resp_frame));
+  Get_File_Transfer_Packet(0x11);
+
+
+  // Send CTRL_OTA_FILE_POS_RESP packet - GETMAP4
+  mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_POS_RESP\r\n");
+  Send_Frame(ctrl_ota_file_pos_resp_frame, sizeof(ctrl_ota_file_pos_resp_frame));
+  Get_File_Transfer_Packet(0x12, &currentCRC32);
+
+  while (doneFlag == 0) {
+    lastCRC32 = currentCRC32;
+
+    ctrl_ota_file_data_resp_frame[5] = currentCRC32 & 0xFF;
+    ctrl_ota_file_data_resp_frame[6] = (currentCRC32 >> 8) & 0xFF;
+    ctrl_ota_file_data_resp_frame[7] = (currentCRC32 >> 16) & 0xFF;
+    ctrl_ota_file_data_resp_frame[8] = (currentCRC32 >> 24) & 0xFF;
+
+    // Send CTRL_OTA_FILE_DATA_RESP packet - GETMAP5
+   // mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_DATA_RESP\r\n");
+    Send_Frame(ctrl_ota_file_data_resp_frame, sizeof(ctrl_ota_file_data_resp_frame));
+    Get_File_Transfer_Packet(0x12, &currentCRC32, &lastCRC32, &doneFlag);
+  }
 
   sendOK();
 }
@@ -1144,19 +1108,13 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
 
     lenByte = (lenByteHigh << 8) | lenByteLow;
 
-    byte offset = 2;
-
-    // File transfer DATA packet with CRC32
-    if (ctrlID == 0x12) {
-      offset = 2;
-    }
-
+    // File end packet
     if (ctrlID == 0x13) {
       *doneFlag = 1;
     }
 
     // Wait for and receive the remaining packet data
-    for (int i = 0; i < (lenByte + offset); i++) {
+    for (int i = 0; i < (lenByte + 2); i++) {
       while(!Serial1.available()) {
         if(millis() - responseTimeout >= response_timeout_period) {
             mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the DATA or CRC in the response packet\r\n");
@@ -1164,7 +1122,7 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
         }
       }
 
-      if (lenByte <= (incomingPacketBuffSize - 5 - offset)) {
+      if (lenByte <= (incomingPacketBuffSize - 5 - 2)) {
         incomingByte = Serial1.read();
         incomingPacket[incomingPacketLen] = incomingByte;
         incomingPacketLen++;
@@ -1173,7 +1131,7 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
       }
     }
 
-    if (lenByte > (incomingPacketBuffSize - 5 - offset)) {
+    if (lenByte > (incomingPacketBuffSize - 5 - 2)) {
       mySerCmd.Print((char *) "WARNING: Packet length is too long for the incomingPacket buffer. Throwing out ");
       mySerCmd.Print(lenByte + 7);
       mySerCmd.Print((char *) " bytes from CTRL_ID 0x");
@@ -1185,7 +1143,7 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
       return;
     }
 
-    if (incomingPacket[2] == request_ctrlid) {
+    if ((incomingPacket[2] == request_ctrlid) || (incomingPacket[2] == 0x13)) {
       requestByteReceived = true;
     } else {
       incomingPacket[0] = 0x00;
@@ -1195,7 +1153,7 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
   }
 
   if (incomingPacket[2] != 0x12) {
-    mySerCmd.Print((char *) "INFO: FP Received ");
+    mySerCmd.Print((char *) "INFO: Received    ");
     for (int i = 0; i < incomingPacketLen; i++) {
       hexString[0] = hexChars[incomingPacket[i] >> 4];
       hexString[1] = hexChars[incomingPacket[i] & 0x0F];

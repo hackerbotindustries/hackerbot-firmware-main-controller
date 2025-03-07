@@ -227,6 +227,7 @@ bool check_left_sensor() {
     227, 452, 419, 350,
     250, 387, 364, 312
   };
+
   return compare_result(&sensor_vl53l7cx_left, left_calibration_values);
 }
 
@@ -243,5 +244,6 @@ bool check_right_sensor() {
     235, 259, 438, 375,
     134, 245, 364, 376
   };
+  
   return compare_result(&sensor_vl53l7cx_right, right_calibration_values);
 }
