@@ -267,6 +267,7 @@ void Send_Handshake(void) {
   Send_Frame_Get_Response(handshake_frame, sizeof(handshake_frame), response, sizeof(response));
 
   response[2] = 0x02;
+  response[4] = 0x51;
 
   mySerCmd.Print((char *) "INFO: Sending handshake acknowledgement frame\r\n");
   Send_Frame(response, sizeof(response));
@@ -510,7 +511,7 @@ void Get_Map(void) {
   }
 
   // Constrain values to acceptable range and set the value into the frame
-  mapIdParam = constrain(mapIdParam, 1, 10);
+  mapIdParam = constrain(mapIdParam, 1, 255);
   get_map_frame[7] = mapIdParam;
 
   mySerCmd.Print((char *) "INFO: Sending get_map_frame\r\n");
@@ -1111,6 +1112,7 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
     // File end packet
     if (ctrlID == 0x13) {
       *doneFlag = 1;
+      mySerCmd.Print((char *) "\r\n");
     }
 
     // Wait for and receive the remaining packet data
