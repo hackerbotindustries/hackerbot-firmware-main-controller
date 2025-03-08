@@ -736,32 +736,24 @@ void set_CLOSE(void) {
 
 // A_ANGLE
 void set_ANGLE(void) {
-  float jointParam = atof(mySerCmd.ReadNext());
-  float angleParam = atof(mySerCmd.ReadNext());
-  float speedParam = atof(mySerCmd.ReadNext());
+  uint8_t jointParam = 0;
+  float angleParam = 0.0;
+  uint8_t speedParam = 0;
 
-  if (speedParam == NULL) {
+  if (!mySerCmd.ReadNextUInt8(&jointParam) || !mySerCmd.ReadNextFloat(&angleParam) || !mySerCmd.ReadNextUInt8(&speedParam)) {
     mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
-  if (jointParam < 0) {
-    jointParam = 0;
-  } else if (jointParam > 6) {
-    jointParam = 6;
+  jointParam = constrain(jointParam, 1, 6);
+
+  if (jointParam != 6) {
+    angleParam = constrain(angleParam, -165.0, 165);
+  } else {
+    angleParam = constrain(angleParam, -175.0, 175);
   }
 
-  if (angleParam < -165.0) {
-    angleParam = -165.0;
-  } else if (angleParam > 165.0) {
-    angleParam = 165.0;
-  }
-
-  if (speedParam < 0) {
-    speedParam = 0;
-  } else if (speedParam > 100) {
-    speedParam = 100;
-  }
+  speedParam  = constrain(speedParam, 0, 100);
 
   mySerCmd.Print((char *) "STATUS: Setting the angle of joint ");
   mySerCmd.Print((int)jointParam);
@@ -789,53 +781,32 @@ void set_ANGLE(void) {
 
 // A_ANGLES
 void set_ANGLES(void) {
-  float joint1Param = atof(mySerCmd.ReadNext());
-  float joint2Param = atof(mySerCmd.ReadNext());
-  float joint3Param = atof(mySerCmd.ReadNext());
-  float joint4Param = atof(mySerCmd.ReadNext());
-  float joint5Param = atof(mySerCmd.ReadNext());
-  float joint6Param = atof(mySerCmd.ReadNext());
-  float speedParam = atof(mySerCmd.ReadNext());
+  float joint1Param = 0.0;
+  float joint2Param = 0.0;
+  float joint3Param = 0.0;
+  float joint4Param = 0.0;
+  float joint5Param = 0.0;
+  float joint6Param = 0.0;
+  uint8_t speedParam = 0;
 
-  if (speedParam == NULL) {
+  if (!mySerCmd.ReadNextFloat(&joint1Param) ||
+      !mySerCmd.ReadNextFloat(&joint2Param) ||
+      !mySerCmd.ReadNextFloat(&joint3Param) ||
+      !mySerCmd.ReadNextFloat(&joint4Param) ||
+      !mySerCmd.ReadNextFloat(&joint5Param) ||
+      !mySerCmd.ReadNextFloat(&joint6Param) ||
+      !mySerCmd.ReadNextUInt8(&speedParam)) {
     mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
-  if (joint1Param < -165.0)
-    joint1Param = 165.0;
-  else if (joint1Param > 165.0)
-    joint1Param = 165.0;
-
-  if (joint2Param < -165.0)
-    joint2Param = 165.0;
-  else if (joint2Param > 165.0)
-    joint2Param = 165.0;
-
-  if (joint3Param < -165.0)
-    joint3Param = 165.0;
-  else if (joint3Param > 165.0)
-    joint3Param = 165.0;
-
-  if (joint4Param < -165.0)
-    joint4Param = 165.0;
-  else if (joint4Param > 165.0)
-    joint4Param = 165.0;
-
-  if (joint5Param < -165.0)
-    joint5Param = 165.0;
-  else if (joint5Param > 165.0)
-    joint5Param = 165.0;
-
-  if (joint6Param < -175.0)
-    joint6Param = 175.0;
-  else if (joint6Param > 175.0)
-    joint6Param = 175.0;
-
-  if (speedParam < 0)
-    speedParam = 0;
-  else if (speedParam > 100)
-    speedParam = 100;
+  joint1Param = constrain(joint1Param, -165.0, 165);
+  joint2Param = constrain(joint1Param, -165.0, 165);
+  joint3Param = constrain(joint1Param, -165.0, 165);
+  joint4Param = constrain(joint1Param, -165.0, 165);
+  joint5Param = constrain(joint1Param, -165.0, 165);
+  joint6Param = constrain(joint1Param, -175.0, 175);
+  speedParam  = constrain(speedParam, 0, 100);
 
   mySerCmd.Print((char *) "STATUS: Setting the angle of the joints to (1) ");
   mySerCmd.Print(joint1Param);
