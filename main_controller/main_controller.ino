@@ -40,6 +40,9 @@ bool arm_attached = false;
 bool tofs_attached = false;
 bool temperature_sensor_attached = false;
 
+bool tofs_active = false;
+bool human_readable_output = true;
+
 // Function prototypes
 void Get_Packet(byte response_packetid = 0x00, byte response_frame[] = nullptr, int sizeOfResponseFrame = 0);
 void Get_File_Transfer_Packet(byte request_ctrlid = 0x00, uint32_t* currentCRC32 = nullptr, uint32_t* lastCRC32 = nullptr, uint8_t* doneFlag = nullptr);
@@ -68,6 +71,7 @@ void setup() {
   // Command Setup
   mySerCmd.AddCmd("PING", SERIALCMD_FROMALL, Send_Ping);
   mySerCmd.AddCmd("VERSION", SERIALCMD_FROMALL, Get_Version);
+  mySerCmd.AddCmd("TOFS", SERIALCMD_FROMALL, Set_Tofs);
   mySerCmd.AddCmd("INIT", SERIALCMD_FROMALL, Send_Handshake);
   mySerCmd.AddCmd("MODE", SERIALCMD_FROMALL, Send_Mode);
   mySerCmd.AddCmd("ENTER", SERIALCMD_FROMALL, Send_Enter);
@@ -120,16 +124,14 @@ void loop() {
   int8_t ret;
   
   // Read ToF sensor values and send a simulated bump command if an object is too close (only run if tof sensors are attached)
-  if (tofs_left_state == TOFS_STATE_READY || tofs_right_state == TOFS_STATE_READY) {
+  if ((tofs_left_state == TOFS_STATE_READY || tofs_right_state == TOFS_STATE_READY) && tofs_active) {
     if (check_left_sensor()) {
       mySerCmd.Print((char *) "INFO: Left Object Detected!\r\n");
-      //Send_Bump();
       ret = mySerCmd.ReadString((char *) "BUMP,0,1");
     }
 
     if (check_right_sensor()) {
       mySerCmd.Print((char *) "INFO: Right Object Detected!\r\n");
-      //Send_Bump();
       ret = mySerCmd.ReadString((char *) "BUMP,1,0");
     }
   }
@@ -252,6 +254,30 @@ void Get_Version(void) {
     mySerCmd.Print((char *) "INFO: Arm Controller (v");
     mySerCmd.Print(RxByte);
     mySerCmd.Print((char *) ".0)\r\n");
+  }
+
+  sendOK();
+}
+
+
+// Set ToFs disabled/enabled command. If the ToFs are disabled the robot won't send a simulated bump command if the ToFs detect an object
+// Parameters
+// int: active (0 = disable tofs, 1 = enable tofs)
+// Example - "TOFS,1"
+void Set_Tofs(void) {
+  uint8_t activeParam = 0;
+  
+  if (!mySerCmd.ReadNextUInt8(&activeParam)) {
+    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    return;
+  }
+
+  if (activeParam == 0) {
+    tofs_active = false;
+    mySerCmd.Print((char *) "INFO: Time of Flight sensors disabled\r\n");
+  } else {
+    tofs_active = true;
+    mySerCmd.Print((char *) "INFO: Time of Flight sensors enabled\r\n");
   }
 
   sendOK();
@@ -683,6 +709,7 @@ void run_CALIBRATION(void) {
   sendOK();
 }
 
+
 // A_OPEN
 void set_OPEN(void) {
   mySerCmd.Print((char *) "INFO: Opening the gripper\r\n");
@@ -693,6 +720,7 @@ void set_OPEN(void) {
   
   sendOK();
 }
+
 
 // A_CLOSE
 void set_CLOSE(void) {
@@ -705,82 +733,149 @@ void set_CLOSE(void) {
   sendOK();
 }
 
+
 // A_ANGLE
 void set_ANGLE(void) {
-  uint8_t jointParam = 0;
-  float angleParam = 0.0;
-  uint8_t speedParam = 0;
+  float jointParam = atof(mySerCmd.ReadNext());
+  float angleParam = atof(mySerCmd.ReadNext());
+  float speedParam = atof(mySerCmd.ReadNext());
 
-  if (!mySerCmd.ReadNextUInt8(&jointParam) ||
-      !mySerCmd.ReadNextFloat(&angleParam) ||
-      !mySerCmd.ReadNextUInt8(&speedParam)) {
+  if (speedParam == NULL) {
     mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
-  // Constrain values to acceptable range
-  jointParam = constrain(jointParam, 1, 6);
-  float limit = LIMIT_FOR_ARM_JOINT(jointParam);
-  angleParam = constrain(angleParam, -1 * limit, limit);
-  speedParam = constrain(speedParam, 0, 100);
+  if (jointParam < 0) {
+    jointParam = 0;
+  } else if (jointParam > 6) {
+    jointParam = 6;
+  }
 
-  char buf[128] = {0};
-  sprintf(buf, "INFO: Setting the angle of joint %d to %0.1f degrees at speed %d\r\n", jointParam, angleParam, speedParam);
-  mySerCmd.Print(buf);
+  if (angleParam < -165.0) {
+    angleParam = -165.0;
+  } else if (angleParam > 165.0) {
+    angleParam = 165.0;
+  }
 
-  uint16_t angleParam16 = hb_ftoi(angleParam);
+  if (speedParam < 0) {
+    speedParam = 0;
+  } else if (speedParam > 100) {
+    speedParam = 100;
+  }
+
+  mySerCmd.Print((char *) "STATUS: Setting the angle of joint ");
+  mySerCmd.Print((int)jointParam);
+  mySerCmd.Print((char *) " to ");
+  mySerCmd.Print(angleParam);
+  mySerCmd.Print((char *) " degrees at speed ");
+  mySerCmd.Print((int)speedParam);
+  mySerCmd.Print((char *) "\r\n");
+
+  uint8_t jointParam8 = (uint8_t)(jointParam);
+  uint16_t angleParam16 = (uint16_t)((angleParam + 165.0) * 10);
+  uint8_t speedParam8 = (uint8_t)(speedParam);
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
-  Wire.write(I2C_COMMAND_ARM_ANGLE);
-  Wire.write(jointParam);
+  Wire.write(0x25);
+  Wire.write(jointParam8);
   Wire.write(highByte(angleParam16)); // Angle H
   Wire.write(lowByte(angleParam16)); // Angle L
-  Wire.write(speedParam);
+  Wire.write(speedParam8);
   Wire.endTransmission();
 
   sendOK();
 }
 
+
 // A_ANGLES
 void set_ANGLES(void) {
-  float jointParam[6] = {0.0};
-  uint8_t speedParam = 0;
+  float joint1Param = atof(mySerCmd.ReadNext());
+  float joint2Param = atof(mySerCmd.ReadNext());
+  float joint3Param = atof(mySerCmd.ReadNext());
+  float joint4Param = atof(mySerCmd.ReadNext());
+  float joint5Param = atof(mySerCmd.ReadNext());
+  float joint6Param = atof(mySerCmd.ReadNext());
+  float speedParam = atof(mySerCmd.ReadNext());
 
-  if (!mySerCmd.ReadNextFloat(&jointParam[0]) ||
-      !mySerCmd.ReadNextFloat(&jointParam[1]) ||
-      !mySerCmd.ReadNextFloat(&jointParam[2]) ||
-      !mySerCmd.ReadNextFloat(&jointParam[3]) ||
-      !mySerCmd.ReadNextFloat(&jointParam[4]) ||
-      !mySerCmd.ReadNextFloat(&jointParam[5]) ||
-      !mySerCmd.ReadNextUInt8(&speedParam)) {
+  if (speedParam == NULL) {
     mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
-  // Constrain values to acceptable range
-  for (int ndx = 0; ndx < 6; ndx++) {
-    float limit = LIMIT_FOR_ARM_JOINT(ndx+1);
-    jointParam[ndx] = constrain(jointParam[ndx], -1 * limit, limit);
-  }
-  speedParam = constrain(speedParam, 0, 100);
+  if (joint1Param < -165.0)
+    joint1Param = 165.0;
+  else if (joint1Param > 165.0)
+    joint1Param = 165.0;
 
-  char buf[160] = {0};
-  char *pos = buf;
-  pos += sprintf(pos, "INFO: Setting the angle of the joints to");
-  for (int ndx = 0; ndx < 6; ndx++) {
-    pos += sprintf(pos, " (%d) %.1f%s", ndx + 1, jointParam[ndx], (ndx < 5 ? "," : ""));
-  }
-  sprintf(pos, " degrees at speed %d\r\n", speedParam);
-  mySerCmd.Print(buf);
+  if (joint2Param < -165.0)
+    joint2Param = 165.0;
+  else if (joint2Param > 165.0)
+    joint2Param = 165.0;
+
+  if (joint3Param < -165.0)
+    joint3Param = 165.0;
+  else if (joint3Param > 165.0)
+    joint3Param = 165.0;
+
+  if (joint4Param < -165.0)
+    joint4Param = 165.0;
+  else if (joint4Param > 165.0)
+    joint4Param = 165.0;
+
+  if (joint5Param < -165.0)
+    joint5Param = 165.0;
+  else if (joint5Param > 165.0)
+    joint5Param = 165.0;
+
+  if (joint6Param < -175.0)
+    joint6Param = 175.0;
+  else if (joint6Param > 175.0)
+    joint6Param = 175.0;
+
+  if (speedParam < 0)
+    speedParam = 0;
+  else if (speedParam > 100)
+    speedParam = 100;
+
+  mySerCmd.Print((char *) "STATUS: Setting the angle of the joints to (1) ");
+  mySerCmd.Print(joint1Param);
+  mySerCmd.Print((char *) ", (2) ");
+  mySerCmd.Print(joint2Param);
+  mySerCmd.Print((char *) ", (3) ");
+  mySerCmd.Print(joint3Param);
+  mySerCmd.Print((char *) ", (4) ");
+  mySerCmd.Print(joint4Param);
+  mySerCmd.Print((char *) ", (5) ");
+  mySerCmd.Print(joint5Param);
+  mySerCmd.Print((char *) ", (6) ");
+  mySerCmd.Print(joint6Param);
+  mySerCmd.Print((char *) " degrees at speed ");
+  mySerCmd.Print((int)speedParam);
+  mySerCmd.Print((char *) "\r\n");
+
+  uint16_t joint1Param16 = (uint16_t)((joint1Param + 165.0) * 10);
+  uint16_t joint2Param16 = (uint16_t)((joint2Param + 165.0) * 10);
+  uint16_t joint3Param16 = (uint16_t)((joint3Param + 165.0) * 10);
+  uint16_t joint4Param16 = (uint16_t)((joint4Param + 165.0) * 10);
+  uint16_t joint5Param16 = (uint16_t)((joint5Param + 165.0) * 10);
+  uint16_t joint6Param16 = (uint16_t)((joint6Param + 175.0) * 10);
+  uint8_t speedParam8 = (uint8_t)(speedParam);
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
-  Wire.write(I2C_COMMAND_ARM_ANGLES);
-  for (int ndx = 0; ndx < 6; ndx++) {
-    uint16_t jointParam16 = hb_ftoi(jointParam[ndx]);
-    Wire.write(highByte(jointParam16)); // Joint Angle H
-    Wire.write(lowByte(jointParam16)); // Joint Angle L
-  }
-  Wire.write(speedParam);
+  Wire.write(0x26);
+  Wire.write(highByte(joint1Param16)); // Joint 1 Angle H
+  Wire.write(lowByte(joint1Param16)); // Joint 1 Angle L
+  Wire.write(highByte(joint2Param16)); // Joint 2 Angle H
+  Wire.write(lowByte(joint2Param16)); // Joint 2 Angle L
+  Wire.write(highByte(joint3Param16)); // Joint 3 Angle H
+  Wire.write(lowByte(joint3Param16)); // Joint 3 Angle L
+  Wire.write(highByte(joint4Param16)); // Joint 4 Angle H
+  Wire.write(lowByte(joint4Param16)); // Joint 4 Angle L
+  Wire.write(highByte(joint5Param16)); // Joint 5 Angle H
+  Wire.write(lowByte(joint5Param16)); // Joint 5 Angle L
+  Wire.write(highByte(joint6Param16)); // Joint 6 Angle H
+  Wire.write(lowByte(joint6Param16)); // Joint 6 Angle L
+  Wire.write(speedParam8);
   Wire.endTransmission();
 
   sendOK();

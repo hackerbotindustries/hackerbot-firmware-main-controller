@@ -185,7 +185,7 @@ void tofs_setup() {
     sensor_vl53l7cx_right.init_sensor(TOF_RIGHT_I2C_ADDRESS << 1);
   }
 
-  if (tofs_left_state = TOFS_STATE_ASSIGNED) {
+  if (tofs_left_state == TOFS_STATE_ASSIGNED) {
     TOFS_VERBOSE_DEBUG((char *) "INFO: Setting configuration on left sensor\r\n");
     set_configuration(&sensor_vl53l7cx_left);
     tofs_left_state = TOFS_STATE_READY;
