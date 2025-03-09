@@ -1,7 +1,7 @@
 /*********************************************************************************
 Hackerbot Industries, LLC
 Created: April 2024
-Updated: 2025.02.20
+Updated: 2025.03.08
 
 This sketch is written for the "Main Controller" PCBA. It serves several funtions:
   1) Communicate with the SLAM Base Robot
@@ -40,8 +40,10 @@ bool arm_attached = false;
 bool tofs_attached = false;
 bool temperature_sensor_attached = false;
 
-bool tofs_active = false;
+bool tofs_active = true;
 bool human_readable_output = true;
+
+unsigned long previousTofMillis = millis();
 
 // Function prototypes
 void Get_Packet(byte response_packetid = 0x00, byte response_frame[] = nullptr, int sizeOfResponseFrame = 0);
@@ -122,24 +124,39 @@ void setup() {
 // -------------------------------------------------------
 void loop() {
   int8_t ret;
+  bool left_tof_obj_detected = false;
+  bool right_tof_obj_detected = false;
   
-  // Read ToF sensor values and send a simulated bump command if an object is too close (only run if tof sensors are attached)
-  if ((tofs_left_state == TOFS_STATE_READY || tofs_right_state == TOFS_STATE_READY) && tofs_active) {
-    if (check_left_sensor()) {
-      mySerCmd.Print((char *) "INFO: Left Object Detected!\r\n");
-      ret = mySerCmd.ReadString((char *) "BUMP,0,1");
-    }
+  // Read ToF sensor values and send a simulated bump command if an object is too close (only run if the
+  // tof sensors are attached, ready, and >1 second has passed since the last BUMP command was sent)
+  if (tofs_attached && tofs_active) {
+    if (tof_left_state == TOF_STATE_READY && tof_right_state == TOF_STATE_READY) {
+      unsigned long currentTofMillis = millis();
 
-    if (check_right_sensor()) {
-      mySerCmd.Print((char *) "INFO: Right Object Detected!\r\n");
-      ret = mySerCmd.ReadString((char *) "BUMP,1,0");
+      left_tof_obj_detected = check_left_sensor();
+      right_tof_obj_detected = check_right_sensor();
+
+      if (currentTofMillis - previousTofMillis >= 1000) {
+        previousTofMillis = currentTofMillis;
+
+        if (left_tof_obj_detected && right_tof_obj_detected) {
+          mySerCmd.Print((char *) "INFO: Both ToFs detect an obstacle\r\n");
+          ret = mySerCmd.ReadString((char *) "BUMP,1,1");
+        } else if (left_tof_obj_detected) {
+          mySerCmd.Print((char *) "INFO: Left ToF detects an obstacle\r\n");
+          ret = mySerCmd.ReadString((char *) "BUMP,0,1");
+        } else if (right_tof_obj_detected) {
+          mySerCmd.Print((char *) "INFO: Right ToF detects an obstacle\r\n");
+          ret = mySerCmd.ReadString((char *) "BUMP,1,0");
+        }
+      }
     }
   }
 
   // Check for incoming serial commands
   ret = mySerCmd.ReadSer();
   if (ret == 0) {
-    mySerCmd.Print((char *) "ERROR: Urecognized command\r\n");
+    mySerCmd.Print((char *) "ERROR: Unrecognized command\r\n");
   }
 
   // Check for data coming from the SLAM base robot
@@ -473,7 +490,7 @@ void Send_Bump(void) {
   sim_bump_frame[7] = (leftParam << 1) | rightParam;
 
   mySerCmd.Print((char *) "INFO: Sending sim_bump_frame\r\n");
-  Send_Frame(sim_bump_frame, sizeof(sim_bump_frame));
+  Send_Frame(sim_bump_frame, sizeof(sim_bump_frame)/sizeof(sim_bump_frame[0]));
 
   sendOK();
 }
@@ -548,19 +565,19 @@ void Get_Map(void) {
     return;
   }
 
-  // Send CTRL_OTA_START_RESP packet - GETMAP2
+  // Send CTRL_OTA_START_RESP packet
   mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_START_RESP\r\n");
   Send_Frame(ctrl_ota_start_resp_frame, sizeof(ctrl_ota_start_resp_frame));
   Get_File_Transfer_Packet(0x10);
 
 
-  // Send CTRL_OTA_FILE_INFO_RESP packet - GETMAP3
+  // Send CTRL_OTA_FILE_INFO_RESP packet
   mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_INFO_RESP\r\n");
   Send_Frame(ctrl_ota_file_info_resp_frame, sizeof(ctrl_ota_file_info_resp_frame));
   Get_File_Transfer_Packet(0x11);
 
 
-  // Send CTRL_OTA_FILE_POS_RESP packet - GETMAP4
+  // Send CTRL_OTA_FILE_POS_RESP packet
   mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_POS_RESP\r\n");
   Send_Frame(ctrl_ota_file_pos_resp_frame, sizeof(ctrl_ota_file_pos_resp_frame));
   Get_File_Transfer_Packet(0x12, &currentCRC32);
@@ -573,8 +590,7 @@ void Get_Map(void) {
     ctrl_ota_file_data_resp_frame[7] = (currentCRC32 >> 16) & 0xFF;
     ctrl_ota_file_data_resp_frame[8] = (currentCRC32 >> 24) & 0xFF;
 
-    // Send CTRL_OTA_FILE_DATA_RESP packet - GETMAP5
-   // mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_DATA_RESP\r\n");
+    // Send CTRL_OTA_FILE_DATA_RESP packet
     Send_Frame(ctrl_ota_file_data_resp_frame, sizeof(ctrl_ota_file_data_resp_frame));
     Get_File_Transfer_Packet(0x12, &currentCRC32, &lastCRC32, &doneFlag);
   }
@@ -703,7 +719,7 @@ void run_CALIBRATION(void) {
   mySerCmd.Print((char *) "INFO: Calibrating the gripper\r\n");
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
-  Wire.write(I2C_COMMAND_ARM_CALIBRATION);
+  Wire.write(I2C_COMMAND_A_CAL);
   Wire.endTransmission();
 
   sendOK();
@@ -715,7 +731,7 @@ void set_OPEN(void) {
   mySerCmd.Print((char *) "INFO: Opening the gripper\r\n");
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
-  Wire.write(I2C_COMMAND_ARM_OPEN);
+  Wire.write(I2C_COMMAND_A_OPEN);
   Wire.endTransmission();
   
   sendOK();
@@ -727,7 +743,7 @@ void set_CLOSE(void) {
   mySerCmd.Print((char *) "INFO: Closing the gripper\r\n");
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
-  Wire.write(I2C_COMMAND_ARM_CLOSE);
+  Wire.write(I2C_COMMAND_A_CLOSE);
   Wire.endTransmission();
   
   sendOK();
@@ -768,7 +784,7 @@ void set_ANGLE(void) {
   uint8_t speedParam8 = (uint8_t)(speedParam);
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
-  Wire.write(0x25);
+  Wire.write(I2C_COMMAND_A_ANGLE);
   Wire.write(jointParam8);
   Wire.write(highByte(angleParam16)); // Angle H
   Wire.write(lowByte(angleParam16)); // Angle L
@@ -789,12 +805,12 @@ void set_ANGLES(void) {
   float joint6Param = 0.0;
   uint8_t speedParam = 0;
 
-  if (!mySerCmd.ReadNextFloat(&joint1Param) ||
-      !mySerCmd.ReadNextFloat(&joint2Param) ||
-      !mySerCmd.ReadNextFloat(&joint3Param) ||
-      !mySerCmd.ReadNextFloat(&joint4Param) ||
-      !mySerCmd.ReadNextFloat(&joint5Param) ||
-      !mySerCmd.ReadNextFloat(&joint6Param) ||
+  if (!mySerCmd.ReadNextFloat(&joint1Param) || 
+      !mySerCmd.ReadNextFloat(&joint2Param) || 
+      !mySerCmd.ReadNextFloat(&joint3Param) || 
+      !mySerCmd.ReadNextFloat(&joint4Param) || 
+      !mySerCmd.ReadNextFloat(&joint5Param) || 
+      !mySerCmd.ReadNextFloat(&joint6Param) || 
       !mySerCmd.ReadNextUInt8(&speedParam)) {
     mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
@@ -833,7 +849,7 @@ void set_ANGLES(void) {
   uint8_t speedParam8 = (uint8_t)(speedParam);
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
-  Wire.write(0x26);
+  Wire.write(I2C_COMMAND_A_ANGLES);
   Wire.write(highByte(joint1Param16)); // Joint 1 Angle H
   Wire.write(lowByte(joint1Param16)); // Joint 1 Angle L
   Wire.write(highByte(joint2Param16)); // Joint 2 Angle H
@@ -894,6 +910,7 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
 
       if (incomingPacket[incomingPacketLen] != 0x55) {
         if (responseByteReceived) {
+          // TODO: Figure out why random bytes are coming in when the ToFs are active
           mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0x55) ");
           hexString[0] = hexChars[incomingPacket[incomingPacketLen] >> 4];
           hexString[1] = hexChars[incomingPacket[incomingPacketLen] & 0x0F];
@@ -916,12 +933,13 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
 
         if(incomingPacket[incomingPacketLen] != 0xAA) {
           if (responseByteReceived) {
-            mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0xAA) ");
+            // TODO: Figure out why random bytes are coming in when the ToFs are active
+            /*mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0xAA) ");
             hexString[0] = hexChars[incomingPacket[incomingPacketLen] >> 4];
             hexString[1] = hexChars[incomingPacket[incomingPacketLen] & 0x0F];
             hexString[2] = '\0';
             mySerCmd.Print(hexString);
-            mySerCmd.Print((char *) "\r\n");
+            mySerCmd.Print((char *) "\r\n");*/
           }
 
           incomingPacketLen = 0;
@@ -934,7 +952,7 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     // Wait for and receive the CTRL_ID
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
-          mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the CTRL_ID in the response packet\r\n");
+          mySerCmd.Print((char *) "WARNING: Timed out while waiting for the CTRL_ID in the response packet\r\n");
           return;
       }
     }
@@ -946,7 +964,7 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     // Wait for and receive the LEN_HI
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
-          mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the LEN_HI in the response packet\r\n");
+          mySerCmd.Print((char *) "WARNING: Timed out while waiting for the LEN_HI in the response packet\r\n");
           return;
       }
     }
@@ -959,7 +977,7 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     // Wait for and receive the LEN_LOW
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
-          mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the LEN_LOW in the response packet\r\n");
+          mySerCmd.Print((char *) "WARNING: Timed out while waiting for the LEN_LOW in the response packet\r\n");
           return;
       }
     }
@@ -974,7 +992,7 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     // Wait for and receive the PACKET_ID
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
-          mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the PACKET_ID in the response packet\r\n");
+          mySerCmd.Print((char *) "WARNING: Timed out while waiting for the PACKET_ID in the response packet\r\n");
           return;
       }
     }
@@ -988,7 +1006,7 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     for (int i = 0; i < (lenByte + 1); i++) {
       while(!Serial1.available()) {
         if(millis() - responseTimeout >= response_timeout_period) {
-            mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the DATA or CRC in the response packet\r\n");
+            mySerCmd.Print((char *) "WARNING: Timed out while waiting for the DATA or CRC in the response packet\r\n");
             return;
         }
       }

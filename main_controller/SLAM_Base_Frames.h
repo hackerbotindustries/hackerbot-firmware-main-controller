@@ -1,8 +1,8 @@
 /*********************************************************************************
 Hackerbot Industries, LLC
-Created: February 2024
+Created: February 2025
 
-All of the commands for the SLAM base robot
+All of the command frames for the SLAM base robot
 *********************************************************************************/
 
 #ifndef SLAMBASEFRAMES_H

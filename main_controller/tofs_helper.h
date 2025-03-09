@@ -1,6 +1,6 @@
 /*********************************************************************************
 Hackerbot Industries, LLC
-Created: February 2024
+Created: February 2025
 
 Configuration and helper functions for the time of flight sensors that are on
 most Hackerbot models so that the robot can avoid obstacles taller than the 
@@ -16,25 +16,20 @@ extern "C" {
 
 #include <vl53l7cx_class.h>
 
-// Define this if you would like verbose diagnostics on the TOF sensor startup
-#define TOFS_DEBUG
-
 #define TOFS_DEFAULT_I2C_ADDRESS  0x29     // Time of flight sensor unconfigured default address
 #define TOF_LEFT_I2C_ADDRESS      0x2A     // Time of flight sensor (left) configured address
 #define TOF_RIGHT_I2C_ADDRESS     0x2B     // Time of flight sensor (right) configured address
 
-enum tofs_state_t {
-  TOFS_STATE_ABSENT = 0,
-  TOFS_STATE_UNCONFIGURED = 1,
-  TOFS_STATE_BEGAN = 2,
-  TOFS_STATE_ASSIGNED = 3,
-  TOFS_STATE_READY = 4
+enum tof_state_t {
+  TOF_STATE_NOTCONNECTED = 0,
+  TOF_STATE_DEFAULTI2CADDRESS = 1,
+  TOF_STATE_INITIALIZED = 2,
+  TOF_STATE_I2CADDRESSASSIGNED = 3,
+  TOF_STATE_READY = 4
 };
 
-extern tofs_state_t tofs_left_state;
-extern tofs_state_t tofs_right_state;
-
-const char* STRING_FOR_TOFS_STATE(tofs_state_t state);
+extern tof_state_t tof_left_state;
+extern tof_state_t tof_right_state;
 
 void tofs_setup();
 
