@@ -56,7 +56,7 @@ void Get_File_Transfer_Packet(byte request_ctrlid = 0x00, uint32_t* currentCRC32
 void setup() {
   unsigned long serialTimout = millis();
 
-  Serial.begin(115200);
+  Serial.begin(230400);
   while(!Serial && millis() - serialTimout <= 5000);
 
   Serial1.begin(230400);
@@ -126,6 +126,9 @@ void loop() {
   int8_t ret;
   bool left_tof_obj_detected = false;
   bool right_tof_obj_detected = false;
+
+  unsigned long startTime;
+  unsigned long endTime;
   
   // Read ToF sensor values and send a simulated bump command if an object is too close (only run if the
   // tof sensors are attached, ready, and >1 second has passed since the last BUMP command was sent)
@@ -133,11 +136,18 @@ void loop() {
     if (tof_left_state == TOF_STATE_READY && tof_right_state == TOF_STATE_READY) {
       unsigned long currentTofMillis = millis();
 
-      left_tof_obj_detected = check_left_sensor();
-      right_tof_obj_detected = check_right_sensor();
-
-      if (currentTofMillis - previousTofMillis >= 1000) {
+      if (currentTofMillis - previousTofMillis >= 2000) {
         previousTofMillis = currentTofMillis;
+
+        startTime = micros();
+        delay(100);
+        //left_tof_obj_detected = check_left_sensor();
+        //right_tof_obj_detected = check_right_sensor();
+        endTime = micros();
+
+        mySerCmd.Print((char *) "DEBUG: Time ");
+        mySerCmd.Print((endTime - startTime) / 1000.0);
+        mySerCmd.Print((char *) "ms\r\n");
 
         if (left_tof_obj_detected && right_tof_obj_detected) {
           mySerCmd.Print((char *) "INFO: Both ToFs detect an obstacle\r\n");
@@ -160,7 +170,12 @@ void loop() {
   }
 
   // Check for data coming from the SLAM base robot
-  if (Serial1.available()) {
+  unsigned int bytesInBuffer = Serial1.available();
+  //if (Serial1.available()) {
+  if (bytesInBuffer) {
+    mySerCmd.Print((char *) "DEBUG: Buffer ");
+    mySerCmd.Print(bytesInBuffer);
+    mySerCmd.Print((char *) "\r\n");
     Get_Packet();
   }
 }
@@ -911,12 +926,12 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
       if (incomingPacket[incomingPacketLen] != 0x55) {
         if (responseByteReceived) {
           // TODO: Figure out why random bytes are coming in when the ToFs are active
-          mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0x55) ");
+          /*mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0x55) ");
           hexString[0] = hexChars[incomingPacket[incomingPacketLen] >> 4];
           hexString[1] = hexChars[incomingPacket[incomingPacketLen] & 0x0F];
           hexString[2] = '\0';
           mySerCmd.Print(hexString);
-          mySerCmd.Print((char *) "\r\n");
+          mySerCmd.Print((char *) "\r\n");*/
         }
       } else {
         incomingPacketLen++;

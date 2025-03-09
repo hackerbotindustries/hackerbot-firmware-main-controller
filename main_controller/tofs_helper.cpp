@@ -149,16 +149,11 @@ bool compare_result(VL53L7CX *sensor, long calibration_values[]) {
 
   do {
     status = sensor->vl53l7cx_check_data_ready(&NewDataReady);
-  } while (!NewDataReady && status == 0);
+  } while (!NewDataReady);
 
-  if (status != 0 || NewDataReady == 0) {
-    return false;
-  }
-
-  status = sensor->vl53l7cx_get_ranging_data(&Result);
-
-  if (status != 0) {
-    // get_ranging_data did complete successfully
+  if ((!status) && (NewDataReady != 0)) {
+    status = sensor_vl53l7cx_right.vl53l7cx_get_ranging_data(&Result);
+  } else {
     return false;
   }
 
