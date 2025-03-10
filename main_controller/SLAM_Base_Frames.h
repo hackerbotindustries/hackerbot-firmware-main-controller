@@ -29,6 +29,25 @@ byte handshake_frame[] = {
 };
 
 
+byte synchronous_frame[] = {
+  0x55, 0xAA, // HEADER_HI, HEADER_LOW
+  0x02, // CTRL_ID
+  0x00, 0x14, // LEN_HI, LEN_LOW
+  0x02, // PACKET_ID
+  0x12, // PACKET_LEN
+  0x00, 0x00, // timestamp
+  0x00, 0x00, // left_encoder
+  0x00, 0x00, // right_encoder
+  0x00, 0x00, // left_speed
+  0x00, 0x00, // right_speed
+  0x00, 0x00, // left_set_speed
+  0x00, 0x00, // right_set_speed
+  0x00, 0x00, // wall_tof
+  0x00, 0x00, // 0, 0, bump_left : 1, bump_right : 1, wall_left : 1, wall_mid : 1, wall_right : 1, cliff_left : 1, cliff_front_left : 1, cliff_front_right : 1, cliff_right : 1, lidar_bump_a :1, lidar_bump_b :1, dc_plug : 1, dust_box : 1, mop_l : 1
+  0x00, 0x00 // CRC_HI, CRC_LOW
+};
+
+
 byte mode_control_frame[] = {
   0x55, 0xAA, // HEADER_HI, HEADER_LOW
   0x02, // CTRL_ID
@@ -143,6 +162,20 @@ byte ctrl_ota_file_data_resp_frame[] = {
   0x32, // CTRL_ID_RESP
   0x00, 0x04, // LEN_HI, LEN_LOW
   0x00, 0x00, 0x00, 0x00, // crc32
+  0x00, 0x00 // CRC_HI, CRC_LOW
+};
+
+
+byte pose_frame[] = {
+  0x55, 0xAA, // HEADER_HI, HEADER_LOW
+  0x02, // CTRL_ID
+  0x00, 0x12, // LEN_HI, LEN_LOW
+  0x23, // PACKET_ID
+  0x10, // PACKET_LEN
+  0x00, 0x00, 0x00, 0x00, // map_id
+  0x00, 0x00, 0x00, 0x00, // pose_x
+  0x00, 0x00, 0x00, 0x00, // pose_y
+  0x00, 0x00, 0x00, 0x00, // pose_angle
   0x00, 0x00 // CRC_HI, CRC_LOW
 };
 

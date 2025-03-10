@@ -44,6 +44,9 @@ bool tofs_active = true;
 bool human_readable_output = true;
 
 unsigned long previousTofMillis = millis();
+bool read_left_tof_toggle = true;
+bool left_tof_obj_detected = false;
+bool right_tof_obj_detected = false;
 
 // Function prototypes
 void Get_Packet(byte response_packetid = 0x00, byte response_frame[] = nullptr, int sizeOfResponseFrame = 0);
@@ -84,8 +87,9 @@ void setup() {
   mySerCmd.AddCmd("BUMP", SERIALCMD_FROMALL, Send_Bump);
   mySerCmd.AddCmd("MOTOR", SERIALCMD_FROMALL, Send_Motor);  
   mySerCmd.AddCmd("GETML", SERIALCMD_FROMALL, Get_ML);
-  
   mySerCmd.AddCmd("GETMAP", SERIALCMD_FROMALL, Get_Map);
+  mySerCmd.AddCmd("STATUS", SERIALCMD_FROMALL, Get_Status);
+  mySerCmd.AddCmd("POSE", SERIALCMD_FROMALL, Get_Pose);
 
   // Head Commands
   mySerCmd.AddCmd("H_IDLE", SERIALCMD_FROMALL, set_IDLE);
@@ -110,6 +114,11 @@ void setup() {
     tofs_setup();
   }
 
+  // Flush the Serial1 rx buffer
+  while (Serial1.available()) {
+    Serial1.read();
+  }
+
   // Change the on-board neopixel to green to indicate setup is complete
   onboard_pixel.setPixelColor(0, onboard_pixel.Color(0, 10, 0));
   onboard_pixel.show();
@@ -124,30 +133,25 @@ void setup() {
 // -------------------------------------------------------
 void loop() {
   int8_t ret;
-  bool left_tof_obj_detected = false;
-  bool right_tof_obj_detected = false;
-
-  unsigned long startTime;
-  unsigned long endTime;
   
   // Read ToF sensor values and send a simulated bump command if an object is too close (only run if the
-  // tof sensors are attached, ready, and >1 second has passed since the last BUMP command was sent)
+  // tof sensors are attached, ready, and >250 milliseconds have passed since the last BUMP command was sent).
+  // Reading a ToF takes ~50ms each so the reading is split up to help avoid the Serial1 RX buffer from
+  // overflowing. Status frames from the SLAM base robot come in every 10ms so it can fill up quickly.
   if (tofs_attached && tofs_active) {
     if (tof_left_state == TOF_STATE_READY && tof_right_state == TOF_STATE_READY) {
       unsigned long currentTofMillis = millis();
 
-      if (currentTofMillis - previousTofMillis >= 2000) {
+      if (currentTofMillis - previousTofMillis >= 125 && read_left_tof_toggle) {
+        left_tof_obj_detected = check_left_sensor();
+        read_left_tof_toggle = false;
+      }
+
+      if (currentTofMillis - previousTofMillis >= 250) {
         previousTofMillis = currentTofMillis;
+        read_left_tof_toggle = true;
 
-        startTime = micros();
-        delay(100);
-        //left_tof_obj_detected = check_left_sensor();
-        //right_tof_obj_detected = check_right_sensor();
-        endTime = micros();
-
-        mySerCmd.Print((char *) "DEBUG: Time ");
-        mySerCmd.Print((endTime - startTime) / 1000.0);
-        mySerCmd.Print((char *) "ms\r\n");
+        right_tof_obj_detected = check_right_sensor();
 
         if (left_tof_obj_detected && right_tof_obj_detected) {
           mySerCmd.Print((char *) "INFO: Both ToFs detect an obstacle\r\n");
@@ -170,12 +174,12 @@ void loop() {
   }
 
   // Check for data coming from the SLAM base robot
-  unsigned int bytesInBuffer = Serial1.available();
-  //if (Serial1.available()) {
-  if (bytesInBuffer) {
-    mySerCmd.Print((char *) "DEBUG: Buffer ");
-    mySerCmd.Print(bytesInBuffer);
-    mySerCmd.Print((char *) "\r\n");
+  if (Serial1.available()) {
+  //unsigned int bytesInBuffer = Serial1.available();
+  //if (bytesInBuffer) {
+  //  mySerCmd.Print((char *) "DEBUG: Buffer ");
+  //  mySerCmd.Print(bytesInBuffer);
+  //  mySerCmd.Print((char *) "\r\n");
     Get_Packet();
   }
 }
@@ -614,6 +618,50 @@ void Get_Map(void) {
 }
 
 
+// Get the latest saved synchonous packet
+// Example - "STATUS"
+void Get_Status(void) {
+  char hexString[3];
+  const char hexChars[] = "0123456789ABCDEF";
+
+  mySerCmd.Print((char *) "INFO: Received    ");
+
+  for (int i = 0; i < 27; i++) {
+    hexString[0] = hexChars[synchronous_frame[i] >> 4];
+    hexString[1] = hexChars[synchronous_frame[i] & 0x0F];
+    hexString[2] = '\0';
+    mySerCmd.Print(hexString);
+    mySerCmd.Print((char *) " ");
+  }
+
+  mySerCmd.Print((char *) "\r\n");
+
+  sendOK();
+}
+
+
+// Get the latest saved pose packet
+// Example - "POSE"
+void Get_Pose(void) {
+  char hexString[3];
+  const char hexChars[] = "0123456789ABCDEF";
+
+  mySerCmd.Print((char *) "INFO: Received    ");
+
+  for (int i = 0; i < 25; i++) {
+    hexString[0] = hexChars[pose_frame[i] >> 4];
+    hexString[1] = hexChars[pose_frame[i] & 0x0F];
+    hexString[2] = '\0';
+    mySerCmd.Print(hexString);
+    mySerCmd.Print((char *) " ");
+  }
+
+  mySerCmd.Print((char *) "\r\n");
+
+  sendOK();
+}
+
+
 // -------------------------------------------------------
 // Head Functions
 // -------------------------------------------------------
@@ -925,13 +973,12 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
 
       if (incomingPacket[incomingPacketLen] != 0x55) {
         if (responseByteReceived) {
-          // TODO: Figure out why random bytes are coming in when the ToFs are active
-          /*mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0x55) ");
+          mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0x55) ");
           hexString[0] = hexChars[incomingPacket[incomingPacketLen] >> 4];
           hexString[1] = hexChars[incomingPacket[incomingPacketLen] & 0x0F];
           hexString[2] = '\0';
           mySerCmd.Print(hexString);
-          mySerCmd.Print((char *) "\r\n");*/
+          mySerCmd.Print((char *) "\r\n");
         }
       } else {
         incomingPacketLen++;
@@ -948,13 +995,12 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
 
         if(incomingPacket[incomingPacketLen] != 0xAA) {
           if (responseByteReceived) {
-            // TODO: Figure out why random bytes are coming in when the ToFs are active
-            /*mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0xAA) ");
+            mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0xAA) ");
             hexString[0] = hexChars[incomingPacket[incomingPacketLen] >> 4];
             hexString[1] = hexChars[incomingPacket[incomingPacketLen] & 0x0F];
             hexString[2] = '\0';
             mySerCmd.Print(hexString);
-            mySerCmd.Print((char *) "\r\n");*/
+            mySerCmd.Print((char *) "\r\n");
           }
 
           incomingPacketLen = 0;
@@ -1051,6 +1097,14 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     // Status Packets = 0x02
     // Pose Packets = 0x23
     if ((incomingPacket[5] == 0x02 || incomingPacket[5] == 0x23) && responseByteReceived) {
+      if (incomingPacket[5] == 0x02) {
+        memcpy(synchronous_frame, incomingPacket, 27);
+      }
+
+      if (incomingPacket[5] == 0x23) {
+        memcpy(pose_frame, incomingPacket, 25);
+      }
+
       return;
     }
 

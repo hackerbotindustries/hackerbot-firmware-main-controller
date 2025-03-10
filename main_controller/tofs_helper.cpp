@@ -24,7 +24,7 @@ void set_configuration(VL53L7CX *sensor) {
     sensor->vl53l7cx_set_resolution(VL53L7CX_RESOLUTION_4X4); // VL53L7CX_RESOLUTION_4X4, VL53L7CX_RESOLUTION_8X8
     sensor->vl53l7cx_set_target_order(VL53L7CX_TARGET_ORDER_CLOSEST);
     sensor->vl53l7cx_set_ranging_mode(VL53L7CX_RANGING_MODE_CONTINUOUS);
-    sensor->vl53l7cx_set_ranging_frequency_hz(4);
+    sensor->vl53l7cx_set_ranging_frequency_hz(32);
 }
 
 
