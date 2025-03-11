@@ -207,6 +207,7 @@ void Set_Machine(void) {
     if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     if (machine_mode) doc["success"] = "false";
     if (machine_mode) doc["error"] = "Missing parameter";
+    if (machine_mode) { serializeJson(doc, Serial); Serial.println(); }
     return;
   }
 
