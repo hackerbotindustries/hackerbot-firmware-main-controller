@@ -14,6 +14,7 @@ This sketch is written for the "Main Controller" PCBA. It serves several funtion
 #include <Wire.h>
 #include <SerialCmd.h>
 #include <Adafruit_NeoPixel.h>
+#include <ArduinoJson.h>
 #include <vl53l7cx_class.h>
 
 #include "Hackerbot_Shared.h"
@@ -66,14 +67,15 @@ void setup() {
 
   delay(1000);
 
-  mySerCmd.Print((char *) "INFO: Initalizing application...\r\n");
-  mySerCmd.Print((char *) "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Initalizing application...\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n");
 
   onboard_pixel.begin();
   onboard_pixel.setPixelColor(0, onboard_pixel.Color(0, 0, 10));
   onboard_pixel.show();
 
   // Command Setup
+  mySerCmd.AddCmd("MACHINE", SERIALCMD_FROMALL, Set_Machine);
   mySerCmd.AddCmd("PING", SERIALCMD_FROMALL, Send_Ping);
   mySerCmd.AddCmd("VERSION", SERIALCMD_FROMALL, Get_Version);
   mySerCmd.AddCmd("TOFS", SERIALCMD_FROMALL, Set_Tofs);
@@ -123,8 +125,8 @@ void setup() {
   onboard_pixel.setPixelColor(0, onboard_pixel.Color(0, 10, 0));
   onboard_pixel.show();
 
-  mySerCmd.Print((char *) "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n");
-  mySerCmd.Print((char *) "INFO: Starting application...\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Starting application...\r\n");
 }
 
 
@@ -154,13 +156,13 @@ void loop() {
         right_tof_obj_detected = check_right_sensor();
 
         if (left_tof_obj_detected && right_tof_obj_detected) {
-          mySerCmd.Print((char *) "INFO: Both ToFs detect an obstacle\r\n");
+          if (!machine_mode) mySerCmd.Print((char *) "INFO: Both ToFs detect an obstacle\r\n");
           ret = mySerCmd.ReadString((char *) "BUMP,1,1");
         } else if (left_tof_obj_detected) {
-          mySerCmd.Print((char *) "INFO: Left ToF detects an obstacle\r\n");
+          if (!machine_mode) mySerCmd.Print((char *) "INFO: Left ToF detects an obstacle\r\n");
           ret = mySerCmd.ReadString((char *) "BUMP,0,1");
         } else if (right_tof_obj_detected) {
-          mySerCmd.Print((char *) "INFO: Right ToF detects an obstacle\r\n");
+          if (!machine_mode) mySerCmd.Print((char *) "INFO: Right ToF detects an obstacle\r\n");
           ret = mySerCmd.ReadString((char *) "BUMP,1,0");
         }
       }
@@ -170,16 +172,16 @@ void loop() {
   // Check for incoming serial commands
   ret = mySerCmd.ReadSer();
   if (ret == 0) {
-    mySerCmd.Print((char *) "ERROR: Unrecognized command\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Unrecognized command\r\n");
   }
 
   // Check for data coming from the SLAM base robot
   if (Serial1.available()) {
   //unsigned int bytesInBuffer = Serial1.available();
   //if (bytesInBuffer) {
-  //  mySerCmd.Print((char *) "DEBUG: Buffer ");
-  //  mySerCmd.Print(bytesInBuffer);
-  //  mySerCmd.Print((char *) "\r\n");
+  //  if (!machine_mode) mySerCmd.Print((char *) "DEBUG: Buffer ");
+  //  if (!machine_mode) mySerCmd.Print(bytesInBuffer);
+  //  if (!machine_mode) mySerCmd.Print((char *) "\r\n");
     Get_Packet();
   }
 }
@@ -189,57 +191,100 @@ void loop() {
 // General SerialCmd Functions
 // -------------------------------------------------------
 void sendOK(void) {
-  mySerCmd.Print((char *) "OK\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "OK\r\n");
 }
+
+
+// Set machine mode disabled/enabled command. In machine mode, responses are sent in JSON format
+// Parameters
+// int: active (0 = disable machine mode, 1 = enable machine mode)
+// Example - "MACHINE,1"
+void Set_Machine(void) {
+  JsonDocument doc;
+  uint8_t enableParam = 0;
+  
+  if (!mySerCmd.ReadNextUInt8(&enableParam)) {
+    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (machine_mode) doc["success"] = "false";
+    if (machine_mode) doc["error"] = "Missing parameter";
+    return;
+  }
+
+  if (enableParam == 0) {
+    machine_mode = false;
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Machine mode disabled\r\n");
+  } else {
+    machine_mode = true;
+    if (machine_mode) doc["success"] = "true";
+    if (machine_mode) doc["command"] = "machine";
+    if (machine_mode) doc["value"] = "1";
+  }
+
+  if (machine_mode) { serializeJson(doc, Serial); Serial.println(); }
+  sendOK();
+}
+
 
 // Sends pings out and listens for responses to see which hardware is attached to the main controller. Then sets the
 // approate flags to enable the associated functionality
 // Example - "PING"
 void Send_Ping(void) {
-  mySerCmd.Print((char *)   "INFO: Main Controller           - ATTACHED\r\n");
+  JsonDocument doc;
+
+  if (!machine_mode) mySerCmd.Print((char *)   "INFO: Main Controller           - ATTACHED\r\n");
+  if (machine_mode) doc["success"] = "true";
+  if (machine_mode) doc["main_controller"] = "attached";
 
   Wire.beginTransmission(TEMP_SENSOR_I2C_ADDRESS);
   if (Wire.endTransmission () == 0) {
     temperature_sensor_attached = true;
-    mySerCmd.Print((char *) "INFO: Temperature Sensor        - ATTACHED\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Temperature Sensor        - ATTACHED\r\n");
+    if (machine_mode) doc["temperature_sensor"] = "attached";
   }
 
   Wire.beginTransmission(TOFS_DEFAULT_I2C_ADDRESS);
   if (Wire.endTransmission () == 0) {
     tofs_attached = true;
-    mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - ATTACHED (not configured)\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - ATTACHED (not configured)\r\n");
+    if (machine_mode) doc["tofs"] = "attached";
   } else {
     Wire.beginTransmission(TOF_LEFT_I2C_ADDRESS);
     if (Wire.endTransmission () == 0) {
       tofs_attached = true;
-      mySerCmd.Print((char *) "INFO: Left ToF Sensor           - ATTACHED\r\n");
+      if (!machine_mode) mySerCmd.Print((char *) "INFO: Left ToF Sensor           - ATTACHED\r\n");
+      if (machine_mode) doc["left_tof"] = "attached";
     }
 
     Wire.beginTransmission(TOF_RIGHT_I2C_ADDRESS);
     if (Wire.endTransmission () == 0) {
       tofs_attached = true;
-      mySerCmd.Print((char *) "INFO: Right ToF Sensor          - ATTACHED\r\n");
+      if (!machine_mode) mySerCmd.Print((char *) "INFO: Right ToF Sensor          - ATTACHED\r\n");
+      if (machine_mode) doc["right_tof"] = "attached";
     }
   }
 
   Wire.beginTransmission(AME_I2C_ADDRESS); // Head Mouth Eyes PCBA
   if (Wire.endTransmission () == 0) {
     head_ame_attached = true;
-    mySerCmd.Print((char *) "INFO: Audio/Mouth/Eyes PCBA     - ATTACHED\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Audio/Mouth/Eyes PCBA     - ATTACHED\r\n");
+    if (machine_mode) doc["audio_mouth_eyes_pcba"] = "attached";
   }
 
   Wire.beginTransmission(DYN_I2C_ADDRESS); // Dynamixel Contoller PCBA
   if (Wire.endTransmission () == 0) {
     head_dyn_attached = true;
-    mySerCmd.Print((char *) "INFO: Head Dynamixel Controller - ATTACHED\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Head Dynamixel Controller - ATTACHED\r\n");
+    if (machine_mode) doc["dynamixel_controller"] = "attached";
   }
 
   Wire.beginTransmission(ARM_I2C_ADDRESS); // Arm Controller PCBA
   if (Wire.endTransmission () == 0) {
     arm_attached = true;
-    mySerCmd.Print((char *) "INFO: Arm Controller            - ATTACHED\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Arm Controller            - ATTACHED\r\n");
+    if (machine_mode) doc["arm_controller"] = "attached";
   }
 
+  if (machine_mode) { serializeJson(doc, Serial); Serial.println(); }
   sendOK();
 }
 
@@ -247,9 +292,9 @@ void Send_Ping(void) {
 // Reports the versions of the boards connected to the Hackerbot
 // Example - "VERSION"
 void Get_Version(void) {
-  mySerCmd.Print((char *) "INFO: Main Controller (v");
-  mySerCmd.Print(VERSION_NUMBER);
-  mySerCmd.Print((char *) ".0)\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Main Controller (v");
+  if (!machine_mode) mySerCmd.Print(VERSION_NUMBER);
+  if (!machine_mode) mySerCmd.Print((char *) ".0)\r\n");
   
   if (head_ame_attached) {
     Wire.beginTransmission(AME_I2C_ADDRESS);
@@ -259,9 +304,9 @@ void Get_Version(void) {
     while(Wire.available()) {
       RxByte = Wire.read();
     }
-    mySerCmd.Print((char *) "INFO: Audio Mouth Eyes (v");
-    mySerCmd.Print(RxByte);
-    mySerCmd.Print((char *) ".0)\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Audio Mouth Eyes (v");
+    if (!machine_mode) mySerCmd.Print(RxByte);
+    if (!machine_mode) mySerCmd.Print((char *) ".0)\r\n");
   }
 
   if (head_dyn_attached) {
@@ -273,9 +318,9 @@ void Get_Version(void) {
     while(Wire.available()) {
       RxByte = Wire.read();
     }
-    mySerCmd.Print((char *) "INFO: Dynamixel Controller (v");
-    mySerCmd.Print(RxByte);
-    mySerCmd.Print((char *) ".0)\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Dynamixel Controller (v");
+    if (!machine_mode) mySerCmd.Print(RxByte);
+    if (!machine_mode) mySerCmd.Print((char *) ".0)\r\n");
   }
 
   if (arm_attached) {
@@ -287,9 +332,9 @@ void Get_Version(void) {
     while(Wire.available()) {
       RxByte = Wire.read();
     }
-    mySerCmd.Print((char *) "INFO: Arm Controller (v");
-    mySerCmd.Print(RxByte);
-    mySerCmd.Print((char *) ".0)\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Arm Controller (v");
+    if (!machine_mode) mySerCmd.Print(RxByte);
+    if (!machine_mode) mySerCmd.Print((char *) ".0)\r\n");
   }
 
   sendOK();
@@ -304,16 +349,16 @@ void Set_Tofs(void) {
   uint8_t activeParam = 0;
   
   if (!mySerCmd.ReadNextUInt8(&activeParam)) {
-    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
   if (activeParam == 0) {
     tofs_active = false;
-    mySerCmd.Print((char *) "INFO: Time of Flight sensors disabled\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Time of Flight sensors disabled\r\n");
   } else {
     tofs_active = true;
-    mySerCmd.Print((char *) "INFO: Time of Flight sensors enabled\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Time of Flight sensors enabled\r\n");
   }
 
   sendOK();
@@ -325,13 +370,13 @@ void Set_Tofs(void) {
 void Send_Handshake(void) {
   byte response[88];
 
-  mySerCmd.Print((char *) "INFO: Sending handshake_frame\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending handshake_frame\r\n");
   Send_Frame_Get_Response(handshake_frame, sizeof(handshake_frame), response, sizeof(response));
 
   response[2] = 0x02;
   response[4] = 0x51;
 
-  mySerCmd.Print((char *) "INFO: Sending handshake acknowledgement frame\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending handshake acknowledgement frame\r\n");
   Send_Frame(response, sizeof(response));
 
   Get_Packet(response[5]);
@@ -345,7 +390,7 @@ void Send_Mode(void) {
   uint8_t modeParam = 0;
 
   if (!mySerCmd.ReadNextUInt8(&modeParam)) {
-    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
@@ -353,7 +398,7 @@ void Send_Mode(void) {
   modeParam = constrain(modeParam, 0, 12);
   mode_control_frame[7] = modeParam;
 
-  mySerCmd.Print((char *) "INFO: Sending mode_control_frame\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending mode_control_frame\r\n");
   Send_Frame(mode_control_frame, sizeof(mode_control_frame));
 
   Get_Packet(mode_control_frame[5]);
@@ -364,7 +409,7 @@ void Send_Mode(void) {
 // Gets a list of all of the maps stored on the robot
 // Example - "GETML"
 void Get_ML(void) {
-  mySerCmd.Print((char *) "INFO: Sending get_map_list_frame\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending get_map_list_frame\r\n");
   Send_Frame(get_map_list_frame, sizeof(get_map_list_frame));
 
   Get_Packet(get_map_list_frame[5]);
@@ -377,7 +422,7 @@ void Get_ML(void) {
 void Send_Enter(void) {
   behavior_control_frame[7] = 0x00;
 
-  mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (ENTER)\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (ENTER)\r\n");
   Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
 
   Get_Packet(behavior_control_frame[5]);
@@ -390,7 +435,7 @@ void Send_Enter(void) {
 void Send_QuickMap(void) {
   behavior_control_frame[7] = 1;
 
-  mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (QUICKMAP)\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (QUICKMAP)\r\n");
   Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
 
   Get_Packet(behavior_control_frame[5]);
@@ -403,7 +448,7 @@ void Send_QuickMap(void) {
 void Send_Dock(void) {
   behavior_control_frame[7] = 6;
 
-  mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (DOCK)\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (DOCK)\r\n");
   Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
 
   Get_Packet(behavior_control_frame[5]);
@@ -416,7 +461,7 @@ void Send_Dock(void) {
 void Send_Stop(void) {
   behavior_control_frame[7] = 7;
 
-  mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (STOP)\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (STOP)\r\n");
   Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
 
   Get_Packet(behavior_control_frame[5]);
@@ -435,7 +480,7 @@ void Send_Goto(void) {
   float sParam = 0.0;
 
   if (!mySerCmd.ReadNextFloat(&xParam) || !mySerCmd.ReadNextFloat(&yParam) || !mySerCmd.ReadNextFloat(&aParam) || !mySerCmd.ReadNextFloat(&sParam)) {
-    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
@@ -480,7 +525,7 @@ void Send_Goto(void) {
   behavior_control_frame[23] = sParamHex[2];
   behavior_control_frame[24] = sParamHex[3];
 
-  mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (GOTO)\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (GOTO)\r\n");
   Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
 
   Get_Packet(behavior_control_frame[5]);
@@ -497,7 +542,7 @@ void Send_Bump(void) {
   uint8_t rightParam = 0;
 
   if (!mySerCmd.ReadNextUInt8(&leftParam) || !mySerCmd.ReadNextUInt8(&rightParam)) {
-    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
@@ -508,7 +553,7 @@ void Send_Bump(void) {
   // binary: 0, 0, 0, 0, 0, 0, left, right
   sim_bump_frame[7] = (leftParam << 1) | rightParam;
 
-  mySerCmd.Print((char *) "INFO: Sending sim_bump_frame\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending sim_bump_frame\r\n");
   Send_Frame(sim_bump_frame, sizeof(sim_bump_frame)/sizeof(sim_bump_frame[0]));
 
   sendOK();
@@ -527,7 +572,7 @@ void Send_Motor(void) {
   int16_t angularParam16 = 0;
 
   if (!mySerCmd.ReadNextFloat(&linearParam) || !mySerCmd.ReadNextFloat(&angularParam)) {
-    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
@@ -548,7 +593,7 @@ void Send_Motor(void) {
   wheel_motor_frame[9]  = lowByte(angularParam16);
   wheel_motor_frame[10] = highByte(angularParam16);
 
-  mySerCmd.Print((char *) "INFO: Sending wheel_motor_frame\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending wheel_motor_frame\r\n");
   Send_Frame(wheel_motor_frame, sizeof(wheel_motor_frame));
 
   sendOK();
@@ -568,7 +613,7 @@ void Get_Map(void) {
   uint8_t doneFlag = 0;
   
   if (!mySerCmd.ReadNextUInt8(&mapIdParam)) {
-    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
@@ -576,28 +621,28 @@ void Get_Map(void) {
   mapIdParam = constrain(mapIdParam, 1, 255);
   get_map_frame[7] = mapIdParam;
 
-  mySerCmd.Print((char *) "INFO: Sending get_map_frame\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending get_map_frame\r\n");
   Send_Frame_Get_Response(get_map_frame, sizeof(get_map_frame), getMapFrameResponse, sizeof(getMapFrameResponse));
 
   if (getMapFrameResponse[7] == 0xFF && getMapFrameResponse[8] == 0xFF && getMapFrameResponse[9] == 0xFF && getMapFrameResponse[10] == 0xFF) {
-    mySerCmd.Print((char *) "ERROR: Invalid map id!\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Invalid map id!\r\n");
     return;
   }
 
   // Send CTRL_OTA_START_RESP packet
-  mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_START_RESP\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_START_RESP\r\n");
   Send_Frame(ctrl_ota_start_resp_frame, sizeof(ctrl_ota_start_resp_frame));
   Get_File_Transfer_Packet(0x10);
 
 
   // Send CTRL_OTA_FILE_INFO_RESP packet
-  mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_INFO_RESP\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_INFO_RESP\r\n");
   Send_Frame(ctrl_ota_file_info_resp_frame, sizeof(ctrl_ota_file_info_resp_frame));
   Get_File_Transfer_Packet(0x11);
 
 
   // Send CTRL_OTA_FILE_POS_RESP packet
-  mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_POS_RESP\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_POS_RESP\r\n");
   Send_Frame(ctrl_ota_file_pos_resp_frame, sizeof(ctrl_ota_file_pos_resp_frame));
   Get_File_Transfer_Packet(0x12, &currentCRC32);
 
@@ -624,17 +669,17 @@ void Get_Status(void) {
   char hexString[3];
   const char hexChars[] = "0123456789ABCDEF";
 
-  mySerCmd.Print((char *) "INFO: Received    ");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Received    ");
 
   for (int i = 0; i < 27; i++) {
     hexString[0] = hexChars[synchronous_frame[i] >> 4];
     hexString[1] = hexChars[synchronous_frame[i] & 0x0F];
     hexString[2] = '\0';
-    mySerCmd.Print(hexString);
-    mySerCmd.Print((char *) " ");
+    if (!machine_mode) mySerCmd.Print(hexString);
+    if (!machine_mode) mySerCmd.Print((char *) " ");
   }
 
-  mySerCmd.Print((char *) "\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "\r\n");
 
   sendOK();
 }
@@ -646,17 +691,17 @@ void Get_Pose(void) {
   char hexString[3];
   const char hexChars[] = "0123456789ABCDEF";
 
-  mySerCmd.Print((char *) "INFO: Received    ");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Received    ");
 
   for (int i = 0; i < 25; i++) {
     hexString[0] = hexChars[pose_frame[i] >> 4];
     hexString[1] = hexChars[pose_frame[i] & 0x0F];
     hexString[2] = '\0';
-    mySerCmd.Print(hexString);
-    mySerCmd.Print((char *) " ");
+    if (!machine_mode) mySerCmd.Print(hexString);
+    if (!machine_mode) mySerCmd.Print((char *) " ");
   }
 
-  mySerCmd.Print((char *) "\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "\r\n");
 
   sendOK();
 }
@@ -670,12 +715,12 @@ void set_IDLE(void) {
   sParam = mySerCmd.ReadNext();
 
   if (head_ame_attached == false) {
-    mySerCmd.Print((char *) "ERROR: Dynamixel controller not attached\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Dynamixel controller not attached\r\n");
     return;
   }
  
   if (sParam == NULL) {
-    mySerCmd.Print((char *) "ERROR: Missing idle parameter\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing idle parameter\r\n");
     return;
   }
 
@@ -684,13 +729,13 @@ void set_IDLE(void) {
     Wire.write(I2C_COMMAND_H_IDLE);
     Wire.write(0x00);
     Wire.endTransmission();
-    mySerCmd.Print((char *) "INFO: Head idle mode disabled\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Head idle mode disabled\r\n");
   } else {
     Wire.beginTransmission(DYN_I2C_ADDRESS);
     Wire.write(I2C_COMMAND_H_IDLE);
     Wire.write(0x01);
     Wire.endTransmission();
-    mySerCmd.Print((char *) "INFO: Head idle mode enabled\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Head idle mode enabled\r\n");
   }
 
   sendOK();
@@ -703,12 +748,12 @@ void set_LOOK(void) {
   uint8_t speedParam = 0;
 
   if (head_ame_attached == false) {
-    mySerCmd.Print((char *) "ERROR: Dynamixel controller not attached\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Dynamixel controller not attached\r\n");
     return;
   }
  
   if (!mySerCmd.ReadNextFloat(&turnParam) || !mySerCmd.ReadNextFloat(&vertParam) || !mySerCmd.ReadNextUInt8(&speedParam)) {
-    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
@@ -719,7 +764,7 @@ void set_LOOK(void) {
 
   char buf[128] = {0};
   sprintf(buf, "INFO: Looking to position turn: %0.2f, vert: %0.2f, at speed: %d\r\n", turnParam, vertParam, speedParam);
-  mySerCmd.Print(buf);
+  if (!machine_mode) mySerCmd.Print(buf);
 
   uint16_t turnParam16 = (uint16_t)(turnParam * 10);
   uint16_t vertParam16 = (uint16_t)(vertParam * 10);
@@ -743,12 +788,12 @@ void set_GAZE(void) {
   float eyeTargetY = 0.0;
 
   if (head_ame_attached == false) {
-    mySerCmd.Print((char *) "ERROR: Audio/Mouth/Eyes controller not attached\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Audio/Mouth/Eyes controller not attached\r\n");
     return;
   }
 
   if (!mySerCmd.ReadNextFloat(&eyeTargetX) || !mySerCmd.ReadNextFloat(&eyeTargetY)) {
-    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
@@ -758,7 +803,7 @@ void set_GAZE(void) {
 
   char buf[128] = {0};
   sprintf(buf, "INFO: Setting: eyeTargetX: %0.2f, eyeTargetY: %0.2f\r\n", eyeTargetX, eyeTargetY);
-  mySerCmd.Print(buf);
+  if (!machine_mode) mySerCmd.Print(buf);
 
   // scale to fit an int8 for smaller i2c transport
   int8_t eyeTargetXInt8 = int8_t(eyeTargetX * 100.0);
@@ -779,7 +824,7 @@ void set_GAZE(void) {
 // -------------------------------------------------------
 // A_CAL
 void run_CALIBRATION(void) {
-  mySerCmd.Print((char *) "INFO: Calibrating the gripper\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Calibrating the gripper\r\n");
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
   Wire.write(I2C_COMMAND_A_CAL);
@@ -791,7 +836,7 @@ void run_CALIBRATION(void) {
 
 // A_OPEN
 void set_OPEN(void) {
-  mySerCmd.Print((char *) "INFO: Opening the gripper\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Opening the gripper\r\n");
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
   Wire.write(I2C_COMMAND_A_OPEN);
@@ -803,7 +848,7 @@ void set_OPEN(void) {
 
 // A_CLOSE
 void set_CLOSE(void) {
-  mySerCmd.Print((char *) "INFO: Closing the gripper\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Closing the gripper\r\n");
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
   Wire.write(I2C_COMMAND_A_CLOSE);
@@ -820,7 +865,7 @@ void set_ANGLE(void) {
   uint8_t speedParam = 0;
 
   if (!mySerCmd.ReadNextUInt8(&jointParam) || !mySerCmd.ReadNextFloat(&angleParam) || !mySerCmd.ReadNextUInt8(&speedParam)) {
-    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
@@ -834,13 +879,13 @@ void set_ANGLE(void) {
 
   speedParam  = constrain(speedParam, 0, 100);
 
-  mySerCmd.Print((char *) "STATUS: Setting the angle of joint ");
-  mySerCmd.Print((int)jointParam);
-  mySerCmd.Print((char *) " to ");
-  mySerCmd.Print(angleParam);
-  mySerCmd.Print((char *) " degrees at speed ");
-  mySerCmd.Print((int)speedParam);
-  mySerCmd.Print((char *) "\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "STATUS: Setting the angle of joint ");
+  if (!machine_mode) mySerCmd.Print((int)jointParam);
+  if (!machine_mode) mySerCmd.Print((char *) " to ");
+  if (!machine_mode) mySerCmd.Print(angleParam);
+  if (!machine_mode) mySerCmd.Print((char *) " degrees at speed ");
+  if (!machine_mode) mySerCmd.Print((int)speedParam);
+  if (!machine_mode) mySerCmd.Print((char *) "\r\n");
 
   uint8_t jointParam8 = (uint8_t)(jointParam);
   uint16_t angleParam16 = (uint16_t)((angleParam + 165.0) * 10);
@@ -875,7 +920,7 @@ void set_ANGLES(void) {
       !mySerCmd.ReadNextFloat(&joint5Param) || 
       !mySerCmd.ReadNextFloat(&joint6Param) || 
       !mySerCmd.ReadNextUInt8(&speedParam)) {
-    mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
@@ -887,21 +932,21 @@ void set_ANGLES(void) {
   joint6Param = constrain(joint1Param, -175.0, 175);
   speedParam  = constrain(speedParam, 0, 100);
 
-  mySerCmd.Print((char *) "STATUS: Setting the angle of the joints to (1) ");
-  mySerCmd.Print(joint1Param);
-  mySerCmd.Print((char *) ", (2) ");
-  mySerCmd.Print(joint2Param);
-  mySerCmd.Print((char *) ", (3) ");
-  mySerCmd.Print(joint3Param);
-  mySerCmd.Print((char *) ", (4) ");
-  mySerCmd.Print(joint4Param);
-  mySerCmd.Print((char *) ", (5) ");
-  mySerCmd.Print(joint5Param);
-  mySerCmd.Print((char *) ", (6) ");
-  mySerCmd.Print(joint6Param);
-  mySerCmd.Print((char *) " degrees at speed ");
-  mySerCmd.Print((int)speedParam);
-  mySerCmd.Print((char *) "\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "STATUS: Setting the angle of the joints to (1) ");
+  if (!machine_mode) mySerCmd.Print(joint1Param);
+  if (!machine_mode) mySerCmd.Print((char *) ", (2) ");
+  if (!machine_mode) mySerCmd.Print(joint2Param);
+  if (!machine_mode) mySerCmd.Print((char *) ", (3) ");
+  if (!machine_mode) mySerCmd.Print(joint3Param);
+  if (!machine_mode) mySerCmd.Print((char *) ", (4) ");
+  if (!machine_mode) mySerCmd.Print(joint4Param);
+  if (!machine_mode) mySerCmd.Print((char *) ", (5) ");
+  if (!machine_mode) mySerCmd.Print(joint5Param);
+  if (!machine_mode) mySerCmd.Print((char *) ", (6) ");
+  if (!machine_mode) mySerCmd.Print(joint6Param);
+  if (!machine_mode) mySerCmd.Print((char *) " degrees at speed ");
+  if (!machine_mode) mySerCmd.Print((int)speedParam);
+  if (!machine_mode) mySerCmd.Print((char *) "\r\n");
 
   uint16_t joint1Param16 = (uint16_t)((joint1Param + 165.0) * 10);
   uint16_t joint2Param16 = (uint16_t)((joint2Param + 165.0) * 10);
@@ -963,7 +1008,7 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     while (incomingPacket[0] != 0x55 && incomingPacket[1] != 0xAA) {
       while (!Serial1.available()) {
         if (millis() - responseTimeout >= response_timeout_period) {
-            mySerCmd.Print((char *) "WARNING: Timed out while waiting for the first header byte in the response packet (0x55)\r\n");
+            if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the first header byte in the response packet (0x55)\r\n");
             return;
         }
       }
@@ -973,19 +1018,19 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
 
       if (incomingPacket[incomingPacketLen] != 0x55) {
         if (responseByteReceived) {
-          mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0x55) ");
+          if (!machine_mode) mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0x55) ");
           hexString[0] = hexChars[incomingPacket[incomingPacketLen] >> 4];
           hexString[1] = hexChars[incomingPacket[incomingPacketLen] & 0x0F];
           hexString[2] = '\0';
-          mySerCmd.Print(hexString);
-          mySerCmd.Print((char *) "\r\n");
+          if (!machine_mode) mySerCmd.Print(hexString);
+          if (!machine_mode) mySerCmd.Print((char *) "\r\n");
         }
       } else {
         incomingPacketLen++;
         
         while (!Serial1.available()) {
           if (millis() - responseTimeout >= response_timeout_period) {
-            mySerCmd.Print((char *) "WARNING: Timed out while waiting for the second header byte in the response packet (0xAA)\r\n");
+            if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the second header byte in the response packet (0xAA)\r\n");
             return;
           }
         }
@@ -995,12 +1040,12 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
 
         if(incomingPacket[incomingPacketLen] != 0xAA) {
           if (responseByteReceived) {
-            mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0xAA) ");
+            if (!machine_mode) mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0xAA) ");
             hexString[0] = hexChars[incomingPacket[incomingPacketLen] >> 4];
             hexString[1] = hexChars[incomingPacket[incomingPacketLen] & 0x0F];
             hexString[2] = '\0';
-            mySerCmd.Print(hexString);
-            mySerCmd.Print((char *) "\r\n");
+            if (!machine_mode) mySerCmd.Print(hexString);
+            if (!machine_mode) mySerCmd.Print((char *) "\r\n");
           }
 
           incomingPacketLen = 0;
@@ -1013,7 +1058,7 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     // Wait for and receive the CTRL_ID
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
-          mySerCmd.Print((char *) "WARNING: Timed out while waiting for the CTRL_ID in the response packet\r\n");
+          if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the CTRL_ID in the response packet\r\n");
           return;
       }
     }
@@ -1025,7 +1070,7 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     // Wait for and receive the LEN_HI
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
-          mySerCmd.Print((char *) "WARNING: Timed out while waiting for the LEN_HI in the response packet\r\n");
+          if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the LEN_HI in the response packet\r\n");
           return;
       }
     }
@@ -1038,7 +1083,7 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     // Wait for and receive the LEN_LOW
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
-          mySerCmd.Print((char *) "WARNING: Timed out while waiting for the LEN_LOW in the response packet\r\n");
+          if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the LEN_LOW in the response packet\r\n");
           return;
       }
     }
@@ -1053,7 +1098,7 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     // Wait for and receive the PACKET_ID
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
-          mySerCmd.Print((char *) "WARNING: Timed out while waiting for the PACKET_ID in the response packet\r\n");
+          if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the PACKET_ID in the response packet\r\n");
           return;
       }
     }
@@ -1067,7 +1112,7 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     for (int i = 0; i < (lenByte + 1); i++) {
       while(!Serial1.available()) {
         if(millis() - responseTimeout >= response_timeout_period) {
-            mySerCmd.Print((char *) "WARNING: Timed out while waiting for the DATA or CRC in the response packet\r\n");
+            if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the DATA or CRC in the response packet\r\n");
             return;
         }
       }
@@ -1082,14 +1127,14 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     }
 
     if (lenByte > (incomingPacketBuffSize - 7)) {
-      mySerCmd.Print((char *) "WARNING: Packet length is too long for the incomingPacket buffer. Throwing out ");
-      mySerCmd.Print(lenByte + 7);
-      mySerCmd.Print((char *) " bytes from PACKET_ID 0x");
+      if (!machine_mode) mySerCmd.Print((char *) "WARNING: Packet length is too long for the incomingPacket buffer. Throwing out ");
+      if (!machine_mode) mySerCmd.Print(lenByte + 7);
+      if (!machine_mode) mySerCmd.Print((char *) " bytes from PACKET_ID 0x");
       hexString[0] = hexChars[packetID >> 4];
       hexString[1] = hexChars[packetID & 0x0F];
       hexString[2] = '\0';
-      mySerCmd.Print(hexString);
-      mySerCmd.Print((char *) "\r\n");
+      if (!machine_mode) mySerCmd.Print(hexString);
+      if (!machine_mode) mySerCmd.Print((char *) "\r\n");
       return;
     }
 
@@ -1120,7 +1165,7 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     }
   }
 
-  mySerCmd.Print((char *) "INFO: Received    ");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Received    ");
   for (int i = 0; i < incomingPacketLen; i++) {
     if (response_frame != nullptr) {
       if (i < sizeOfResponseFrame) {
@@ -1130,16 +1175,16 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     hexString[0] = hexChars[incomingPacket[i] >> 4];
     hexString[1] = hexChars[incomingPacket[i] & 0x0F];
     hexString[2] = '\0';
-    mySerCmd.Print(hexString);
-    mySerCmd.Print((char *) " ");
+    if (!machine_mode) mySerCmd.Print(hexString);
+    if (!machine_mode) mySerCmd.Print((char *) " ");
   }
-  mySerCmd.Print((char *) " (");
-  mySerCmd.Print(incomingPacketLen);
-  mySerCmd.Print((char *) ")\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) " (");
+  if (!machine_mode) mySerCmd.Print(incomingPacketLen);
+  if (!machine_mode) mySerCmd.Print((char *) ")\r\n");
 
   if (response_frame != nullptr) {
     if (incomingPacketLen != sizeOfResponseFrame) {
-      mySerCmd.Print((char *) "WARNING: Length of the frame received does not match the length that was specified\r\n");
+      if (!machine_mode) mySerCmd.Print((char *) "WARNING: Length of the frame received does not match the length that was specified\r\n");
     }
   }
 }
@@ -1174,7 +1219,7 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
     while (incomingPacket[0] != 0x55 && incomingPacket[1] != 0xAA) {
       while (!Serial1.available()) {
         if (millis() - responseTimeout >= response_timeout_period) {
-            mySerCmd.Print((char *) "WARNING: Timed out while waiting for the first header byte in the response packet (0x55)\r\n");
+            if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the first header byte in the response packet (0x55)\r\n");
             return;
         }
       }
@@ -1184,19 +1229,19 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
 
       if (incomingPacket[incomingPacketLen] != 0x55) {
         if (requestByteReceived) {
-          mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0x55) ");
+          if (!machine_mode) mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0x55) ");
           hexString[0] = hexChars[incomingPacket[incomingPacketLen] >> 4];
           hexString[1] = hexChars[incomingPacket[incomingPacketLen] & 0x0F];
           hexString[2] = '\0';
-          mySerCmd.Print(hexString);
-          mySerCmd.Print((char *) "\r\n");
+          if (!machine_mode) mySerCmd.Print(hexString);
+          if (!machine_mode) mySerCmd.Print((char *) "\r\n");
         }
       } else {
         incomingPacketLen++;
         
         while (!Serial1.available()) {
           if (millis() - responseTimeout >= response_timeout_period) {
-            mySerCmd.Print((char *) "WARNING: Timed out while waiting for the second header byte in the response packet (0xAA)\r\n");
+            if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the second header byte in the response packet (0xAA)\r\n");
             return;
           }
         }
@@ -1206,12 +1251,12 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
 
         if(incomingPacket[incomingPacketLen] != 0xAA) {
           if (requestByteReceived) {
-            mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0xAA) ");
+            if (!machine_mode) mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0xAA) ");
             hexString[0] = hexChars[incomingPacket[incomingPacketLen] >> 4];
             hexString[1] = hexChars[incomingPacket[incomingPacketLen] & 0x0F];
             hexString[2] = '\0';
-            mySerCmd.Print(hexString);
-            mySerCmd.Print((char *) "\r\n");
+            if (!machine_mode) mySerCmd.Print(hexString);
+            if (!machine_mode) mySerCmd.Print((char *) "\r\n");
           }
 
           incomingPacketLen = 0;
@@ -1224,7 +1269,7 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
     // Wait for and receive the CTRL_ID
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
-          mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the CTRL_ID in the response packet\r\n");
+          if (!machine_mode) mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the CTRL_ID in the response packet\r\n");
           return;
       }
     }
@@ -1237,7 +1282,7 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
     // Wait for and receive the LEN_HI
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
-          mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the LEN_HI in the response packet\r\n");
+          if (!machine_mode) mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the LEN_HI in the response packet\r\n");
           return;
       }
     }
@@ -1250,7 +1295,7 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
     // Wait for and receive the LEN_LOW
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
-          mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the LEN_LOW in the response packet\r\n");
+          if (!machine_mode) mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the LEN_LOW in the response packet\r\n");
           return;
       }
     }
@@ -1265,14 +1310,14 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
     // File end packet
     if (ctrlID == 0x13) {
       *doneFlag = 1;
-      mySerCmd.Print((char *) "\r\n");
+      if (!machine_mode) mySerCmd.Print((char *) "\r\n");
     }
 
     // Wait for and receive the remaining packet data
     for (int i = 0; i < (lenByte + 2); i++) {
       while(!Serial1.available()) {
         if(millis() - responseTimeout >= response_timeout_period) {
-            mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the DATA or CRC in the response packet\r\n");
+            if (!machine_mode) mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the DATA or CRC in the response packet\r\n");
             return;
         }
       }
@@ -1287,14 +1332,14 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
     }
 
     if (lenByte > (incomingPacketBuffSize - 5 - 2)) {
-      mySerCmd.Print((char *) "WARNING: Packet length is too long for the incomingPacket buffer. Throwing out ");
-      mySerCmd.Print(lenByte + 7);
-      mySerCmd.Print((char *) " bytes from CTRL_ID 0x");
+      if (!machine_mode) mySerCmd.Print((char *) "WARNING: Packet length is too long for the incomingPacket buffer. Throwing out ");
+      if (!machine_mode) mySerCmd.Print(lenByte + 7);
+      if (!machine_mode) mySerCmd.Print((char *) " bytes from CTRL_ID 0x");
       hexString[0] = hexChars[ctrlID >> 4];
       hexString[1] = hexChars[ctrlID & 0x0F];
       hexString[2] = '\0';
-      mySerCmd.Print(hexString);
-      mySerCmd.Print((char *) "\r\n");
+      if (!machine_mode) mySerCmd.Print(hexString);
+      if (!machine_mode) mySerCmd.Print((char *) "\r\n");
       return;
     }
 
@@ -1308,25 +1353,25 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
   }
 
   if (incomingPacket[2] != 0x12) {
-    mySerCmd.Print((char *) "INFO: Received    ");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Received    ");
     for (int i = 0; i < incomingPacketLen; i++) {
       hexString[0] = hexChars[incomingPacket[i] >> 4];
       hexString[1] = hexChars[incomingPacket[i] & 0x0F];
       hexString[2] = '\0';
-      mySerCmd.Print(hexString);
-      mySerCmd.Print((char *) " ");
+      if (!machine_mode) mySerCmd.Print(hexString);
+      if (!machine_mode) mySerCmd.Print((char *) " ");
     }
-    mySerCmd.Print((char *) " (");
-    mySerCmd.Print(incomingPacketLen);
-    mySerCmd.Print((char *) ")\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) " (");
+    if (!machine_mode) mySerCmd.Print(incomingPacketLen);
+    if (!machine_mode) mySerCmd.Print((char *) ")\r\n");
   } else {
-    //mySerCmd.Print((char *) "INFO: FP Received ");
+    //if (!machine_mode) mySerCmd.Print((char *) "INFO: FP Received ");
     for (int i = 7; i < incomingPacketLen - 2; i++) {
       hexString[0] = hexChars[incomingPacket[i] >> 4];
       hexString[1] = hexChars[incomingPacket[i] & 0x0F];
       hexString[2] = '\0';
-      mySerCmd.Print(hexString);
-      //mySerCmd.Print((char *) " ");
+      if (!machine_mode) mySerCmd.Print(hexString);
+      //if (!machine_mode) mySerCmd.Print((char *) " ");
     }
   }
 
@@ -1356,15 +1401,15 @@ void Send_Frame(byte frame[], int sizeOfFrame) {
   frame[sizeOfFrame - 1] = crcHex[0];
 
   if (frame[2] != 0x32) {
-    mySerCmd.Print((char *) "INFO: Transmitted ");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Transmitted ");
     for(int i = 0; i < sizeOfFrame; i++) {
       hexString[0] = hexChars[frame[i] >> 4];
       hexString[1] = hexChars[frame[i] & 0x0F];
       hexString[2] = '\0';
-      mySerCmd.Print(hexString);
-      mySerCmd.Print((char *) " ");
+      if (!machine_mode) mySerCmd.Print(hexString);
+      if (!machine_mode) mySerCmd.Print((char *) " ");
     }
-    mySerCmd.Print((char *) "\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "\r\n");
   }
 
   Serial1.write(frame, sizeOfFrame);

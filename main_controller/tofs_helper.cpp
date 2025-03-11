@@ -32,12 +32,12 @@ void set_configuration(VL53L7CX *sensor) {
 // Time of flight sensors setup fuction
 // -------------------------------------------------------
 void tofs_setup() {
-  mySerCmd.Print((char *) "INFO: Beginning time of flight sensor setup...\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Beginning time of flight sensor setup...\r\n");
 
   Wire.beginTransmission(TOF_LEFT_I2C_ADDRESS);
   if (Wire.endTransmission () == 0) {
     tof_left_state = TOF_STATE_I2CADDRESSASSIGNED;
-    mySerCmd.Print((char *) "INFO: Left ToF I2C address is already set\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Left ToF I2C address is already set\r\n");
   } else {
     tof_left_state = TOF_STATE_DEFAULTI2CADDRESS;
   }
@@ -45,7 +45,7 @@ void tofs_setup() {
   Wire.beginTransmission(TOF_RIGHT_I2C_ADDRESS);
   if (Wire.endTransmission () == 0) {
     tof_right_state = TOF_STATE_I2CADDRESSASSIGNED;
-    mySerCmd.Print((char *) "INFO: Right ToF I2C address is already set\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Right ToF I2C address is already set\r\n");
   } else {
     tof_right_state = TOF_STATE_DEFAULTI2CADDRESS;
   }
@@ -53,89 +53,89 @@ void tofs_setup() {
   if (tof_left_state != TOF_STATE_I2CADDRESSASSIGNED && tof_right_state != TOF_STATE_I2CADDRESSASSIGNED) {
     Wire.beginTransmission(TOFS_DEFAULT_I2C_ADDRESS);
     if (Wire.endTransmission () == 0) {
-      mySerCmd.Print((char *) "INFO: Detected ToF(s) at their default I2C addresses\r\n");
+      if (!machine_mode) mySerCmd.Print((char *) "INFO: Detected ToF(s) at their default I2C addresses\r\n");
     } else {
-      mySerCmd.Print((char *) "WARNING: No ToF sensors detected!\r\n");
+      if (!machine_mode) mySerCmd.Print((char *) "WARNING: No ToF sensors detected!\r\n");
     }
   }
 
   if (tof_left_state == TOF_STATE_DEFAULTI2CADDRESS) {
-    mySerCmd.Print((char *) "INFO: Setting up the left time of flight sensor...\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Setting up the left time of flight sensor...\r\n");
 
     if (tof_right_state == TOF_STATE_DEFAULTI2CADDRESS) {
-      mySerCmd.Print((char *) "INFO: Initalizing the right ToF sensor so we can then disable it\r\n");
+      if (!machine_mode) mySerCmd.Print((char *) "INFO: Initalizing the right ToF sensor so we can then disable it\r\n");
       sensor_vl53l7cx_right.begin();
       tof_right_state = TOF_STATE_INITIALIZED;
     }
 
-    mySerCmd.Print((char *) "INFO: Disabling the right ToF sensor\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Disabling the right ToF sensor\r\n");
     sensor_vl53l7cx_right.vl53l7cx_off();
     delay(100);
 
-    mySerCmd.Print((char *) "INFO: Initalizing the left ToF sensor\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Initalizing the left ToF sensor\r\n");
     sensor_vl53l7cx_left.begin();
     tof_left_state = TOF_STATE_INITIALIZED;
     
-    mySerCmd.Print((char *) "INFO: Loading firmware into the left ToF sensor (~10 seconds)\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Loading firmware into the left ToF sensor (~10 seconds)\r\n");
     sensor_vl53l7cx_left.init_sensor();
 
-    mySerCmd.Print((char *) "INFO: Updating the left ToF sensors I2C address\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Updating the left ToF sensors I2C address\r\n");
     sensor_vl53l7cx_left.vl53l7cx_set_i2c_address(TOF_LEFT_I2C_ADDRESS << 1); // default: 0x52 (0x29); ours: left: 0x54 (0x2A), right: 0x56 (0x2B)
     tof_left_state = TOF_STATE_I2CADDRESSASSIGNED;
 
     // turn back on right sensor, we won't init here since we handle the right sensor next
-    mySerCmd.Print((char *) "INFO: Enabling the right ToF sensor\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Enabling the right ToF sensor\r\n");
     sensor_vl53l7cx_right.vl53l7cx_on();
     delay(100);
   } else {
-    mySerCmd.Print((char *) "INFO: Re-initializing the left ToF sensor after a reboot...\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Re-initializing the left ToF sensor after a reboot...\r\n");
     sensor_vl53l7cx_left.init_sensor(TOF_LEFT_I2C_ADDRESS << 1);
   }
 
   if (tof_right_state == TOF_STATE_DEFAULTI2CADDRESS || tof_right_state == TOF_STATE_INITIALIZED) {
-    mySerCmd.Print((char *) "INFO: Setting up the right time of flight sensor...\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Setting up the right time of flight sensor...\r\n");
 
     if (tof_right_state == TOF_STATE_DEFAULTI2CADDRESS) {
-      mySerCmd.Print((char *) "INFO: Initalizing the right ToF sensor\r\n");
+      if (!machine_mode) mySerCmd.Print((char *) "INFO: Initalizing the right ToF sensor\r\n");
       sensor_vl53l7cx_right.begin();
       tof_right_state = TOF_STATE_INITIALIZED;
     }
 
-    mySerCmd.Print((char *) "INFO: Loading firmware into the right ToF sensor (~10 seconds)\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Loading firmware into the right ToF sensor (~10 seconds)\r\n");
     sensor_vl53l7cx_right.init_sensor();
 
-    mySerCmd.Print((char *) "INFO: Updating the right ToF sensors I2C address\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Updating the right ToF sensors I2C address\r\n");
     sensor_vl53l7cx_right.vl53l7cx_set_i2c_address(TOF_RIGHT_I2C_ADDRESS << 1); // default: 0x52 (0x29); ours: left: 0x54 (0x2A), right: 0x56 (0x2B)
     tof_right_state = TOF_STATE_I2CADDRESSASSIGNED;
   } else {
-    mySerCmd.Print((char *) "INFO: Re-initializing the right ToF sensor after a reboot...\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Re-initializing the right ToF sensor after a reboot...\r\n");
     sensor_vl53l7cx_right.init_sensor(TOF_RIGHT_I2C_ADDRESS << 1);
   }
 
   if (tof_left_state == TOF_STATE_I2CADDRESSASSIGNED) {
-    mySerCmd.Print((char *) "INFO: Configuring settings into the left ToF sensor\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Configuring settings into the left ToF sensor\r\n");
     set_configuration(&sensor_vl53l7cx_left);
     tof_left_state = TOF_STATE_READY;
   }
 
   if (tof_right_state == TOF_STATE_I2CADDRESSASSIGNED) {
-    mySerCmd.Print((char *) "INFO: Configuring setting into the right ToF sensor\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Configuring setting into the right ToF sensor\r\n");
     set_configuration(&sensor_vl53l7cx_right);
     tof_right_state = TOF_STATE_READY;
   }
 
   // Start taking measurments from both ToF sensors
   if (tof_left_state == TOF_STATE_READY && tof_right_state == TOF_STATE_READY) {
-    mySerCmd.Print((char *) "INFO: Starting ranging on the left ToF sensor\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Starting ranging on the left ToF sensor\r\n");
     sensor_vl53l7cx_left.vl53l7cx_start_ranging();
     
-    mySerCmd.Print((char *) "INFO: Starting ranging on the right ToF sensor\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Starting ranging on the right ToF sensor\r\n");
     sensor_vl53l7cx_right.vl53l7cx_start_ranging();
   } else {
-    mySerCmd.Print((char *) "ERROR: Time of flight sensor(s) failed setup! Unable to start ranging!\r\n");
+    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Time of flight sensor(s) failed setup! Unable to start ranging!\r\n");
   }
 
-  mySerCmd.Print((char *) "INFO: Time of flight sensor setup complete\r\n");
+  if (!machine_mode) mySerCmd.Print((char *) "INFO: Time of flight sensor setup complete\r\n");
 }
 
 
