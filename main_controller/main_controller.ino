@@ -41,7 +41,7 @@ bool tofs_attached = false;
 bool temperature_sensor_attached = false;
 
 bool tofs_active = true;
-bool human_readable_output = true;
+bool machine_mode = false;
 
 unsigned long previousTofMillis = millis();
 bool read_left_tof_toggle = true;
