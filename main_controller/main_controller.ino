@@ -743,6 +743,11 @@ void set_IDLE(void) {
 }
 
 
+// Sets the position of the Hackerbot head's neck
+// Parameters
+// float: yaw (rotation angle between 100.0 and 260.0 degrees - 180.0 is looking straight ahead)
+// float: pitch (vertical angle between 150.0 and 250.0 degrees - 180.0 is looking straight ahead)
+// Example - "LOOK,180.0,180.0"
 void set_LOOK(void) {
   float turnParam = 0.0;
   float vertParam = 0.0;
@@ -784,6 +789,11 @@ void set_LOOK(void) {
 }
 
 
+// Sets the gaze of the Hackerbot head's eyes
+// Parameters
+// float: x (position between -1.0 and 1.0)
+// float: y (position between -1.0 and 1.0)
+// Example - "GAZE,-0.8,0.2"
 void set_GAZE(void) {
   float eyeTargetX = 0.0;
   float eyeTargetY = 0.0;
