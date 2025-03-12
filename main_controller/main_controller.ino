@@ -1,7 +1,8 @@
 /*********************************************************************************
 Hackerbot Industries, LLC
-Created: April 2024
-Updated: 2025.03.08
+Created By: Ian Bernstein
+Created:    April 2024
+Updated:    2025.03.11
 
 This sketch is written for the "Main Controller" PCBA. It serves several funtions:
   1) Communicate with the SLAM Base Robot
@@ -9,6 +10,10 @@ This sketch is written for the "Main Controller" PCBA. It serves several funtion
   3) Handle the front time of flight sensors for object detection and avoidance
   4) Get temperature data from the on-board temperature sensor
   5) Handle user code for any user added I2C devices (eg QWIIC or STEMMA sensors)
+
+Special thanks to the following for their code contributions to this codebase:
+Skylar - https://github.com/SkylarCastator
+Randy  - https://github.com/rbeiter
 *********************************************************************************/
 
 #include <Wire.h>
