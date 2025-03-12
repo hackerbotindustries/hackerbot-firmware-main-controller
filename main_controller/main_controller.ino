@@ -80,9 +80,9 @@ void setup() {
   onboard_pixel.show();
 
   // Command Setup
-  mySerCmd.AddCmd("MACHINE", SERIALCMD_FROMALL, Set_Machine);
   mySerCmd.AddCmd("PING", SERIALCMD_FROMALL, Send_Ping);
   mySerCmd.AddCmd("VERSION", SERIALCMD_FROMALL, Get_Version);
+  mySerCmd.AddCmd("MACHINE", SERIALCMD_FROMALL, Set_Machine);
   mySerCmd.AddCmd("TOFS", SERIALCMD_FROMALL, Set_Tofs);
   mySerCmd.AddCmd("INIT", SERIALCMD_FROMALL, Send_Handshake);
   mySerCmd.AddCmd("MODE", SERIALCMD_FROMALL, Send_Mode);
@@ -99,16 +99,16 @@ void setup() {
   mySerCmd.AddCmd("POSE", SERIALCMD_FROMALL, Get_Pose);
 
   // Head Commands
-  mySerCmd.AddCmd("H_IDLE", SERIALCMD_FROMALL, set_IDLE);
-  mySerCmd.AddCmd("H_LOOK", SERIALCMD_FROMALL, set_LOOK);
-  mySerCmd.AddCmd("H_GAZE", SERIALCMD_FROMALL, set_GAZE);
+  mySerCmd.AddCmd("H_IDLE", SERIALCMD_FROMALL, set_H_IDLE);
+  mySerCmd.AddCmd("H_LOOK", SERIALCMD_FROMALL, set_H_LOOK);
+  mySerCmd.AddCmd("H_GAZE", SERIALCMD_FROMALL, set_H_GAZE);
 
   // Arm Commands
-  mySerCmd.AddCmd("A_CAL", SERIALCMD_FROMALL, run_CALIBRATION);
-  mySerCmd.AddCmd("A_OPEN", SERIALCMD_FROMALL, set_OPEN);
-  mySerCmd.AddCmd("A_CLOSE", SERIALCMD_FROMALL, set_CLOSE);
-  mySerCmd.AddCmd("A_ANGLE", SERIALCMD_FROMALL, set_ANGLE);
-  mySerCmd.AddCmd("A_ANGLES", SERIALCMD_FROMALL, set_ANGLES);
+  mySerCmd.AddCmd("A_CAL", SERIALCMD_FROMALL, run_A_CAL);
+  mySerCmd.AddCmd("A_OPEN", SERIALCMD_FROMALL, set_A_OPEN);
+  mySerCmd.AddCmd("A_CLOSE", SERIALCMD_FROMALL, set_A_CLOSE);
+  mySerCmd.AddCmd("A_ANGLE", SERIALCMD_FROMALL, set_A_ANGLE);
+  mySerCmd.AddCmd("A_ANGLES", SERIALCMD_FROMALL, set_A_ANGLES);
 
   // Initialize I2C bus
   Wire.begin();
@@ -200,72 +200,43 @@ void sendOK(void) {
 }
 
 
-// Set machine mode disabled/enabled command. In machine mode, responses are sent in JSON format
-// Parameters
-// int: active (0 = disable machine mode, 1 = enable machine mode)
-// Example - "MACHINE,1"
-void Set_Machine(void) {
-  JsonDocument doc;
-  uint8_t enableParam = 0;
-  
-  if (!mySerCmd.ReadNextUInt8(&enableParam)) {
-    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
-    if (machine_mode) doc["success"] = "false";
-    if (machine_mode) doc["error"] = "Missing parameter";
-    if (machine_mode) { serializeJson(doc, Serial); Serial.println(); }
-    return;
-  }
-
-  if (enableParam == 0) {
-    machine_mode = false;
-    if (!machine_mode) mySerCmd.Print((char *) "INFO: Machine mode disabled\r\n");
-  } else {
-    machine_mode = true;
-    if (machine_mode) doc["success"] = "true";
-    if (machine_mode) doc["command"] = "machine";
-    if (machine_mode) doc["value"] = "1";
-  }
-
-  if (machine_mode) { serializeJson(doc, Serial); Serial.println(); }
-  sendOK();
-}
-
-
 // Sends pings out and listens for responses to see which hardware is attached to the main controller. Then sets the
 // approate flags to enable the associated functionality
 // Example - "PING"
 void Send_Ping(void) {
-  JsonDocument doc;
+  JsonDocument json;
+
+  if (machine_mode) json["success"] = "true";
+  if (machine_mode) json["command"] = "ping";
 
   if (!machine_mode) mySerCmd.Print((char *)   "INFO: Main Controller           - ATTACHED\r\n");
-  if (machine_mode) doc["success"] = "true";
-  if (machine_mode) doc["main_controller"] = "attached";
+  if (machine_mode) json["main_controller"] = "attached";
 
   Wire.beginTransmission(TEMP_SENSOR_I2C_ADDRESS);
   if (Wire.endTransmission () == 0) {
     temperature_sensor_attached = true;
     if (!machine_mode) mySerCmd.Print((char *) "INFO: Temperature Sensor        - ATTACHED\r\n");
-    if (machine_mode) doc["temperature_sensor"] = "attached";
+    if (machine_mode) json["temperature_sensor"] = "attached";
   }
 
   Wire.beginTransmission(TOFS_DEFAULT_I2C_ADDRESS);
   if (Wire.endTransmission () == 0) {
     tofs_attached = true;
     if (!machine_mode) mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - ATTACHED (not configured)\r\n");
-    if (machine_mode) doc["tofs"] = "attached";
+    if (machine_mode) json["tofs"] = "attached";
   } else {
     Wire.beginTransmission(TOF_LEFT_I2C_ADDRESS);
     if (Wire.endTransmission () == 0) {
       tofs_attached = true;
       if (!machine_mode) mySerCmd.Print((char *) "INFO: Left ToF Sensor           - ATTACHED\r\n");
-      if (machine_mode) doc["left_tof"] = "attached";
+      if (machine_mode) json["left_tof"] = "attached";
     }
 
     Wire.beginTransmission(TOF_RIGHT_I2C_ADDRESS);
     if (Wire.endTransmission () == 0) {
       tofs_attached = true;
       if (!machine_mode) mySerCmd.Print((char *) "INFO: Right ToF Sensor          - ATTACHED\r\n");
-      if (machine_mode) doc["right_tof"] = "attached";
+      if (machine_mode) json["right_tof"] = "attached";
     }
   }
 
@@ -273,24 +244,24 @@ void Send_Ping(void) {
   if (Wire.endTransmission () == 0) {
     head_ame_attached = true;
     if (!machine_mode) mySerCmd.Print((char *) "INFO: Audio/Mouth/Eyes PCBA     - ATTACHED\r\n");
-    if (machine_mode) doc["audio_mouth_eyes_pcba"] = "attached";
+    if (machine_mode) json["audio_mouth_eyes"] = "attached";
   }
 
   Wire.beginTransmission(DYN_I2C_ADDRESS); // Dynamixel Contoller PCBA
   if (Wire.endTransmission () == 0) {
     head_dyn_attached = true;
     if (!machine_mode) mySerCmd.Print((char *) "INFO: Head Dynamixel Controller - ATTACHED\r\n");
-    if (machine_mode) doc["dynamixel_controller"] = "attached";
+    if (machine_mode) json["dynamixel_controller"] = "attached";
   }
 
   Wire.beginTransmission(ARM_I2C_ADDRESS); // Arm Controller PCBA
   if (Wire.endTransmission () == 0) {
     arm_attached = true;
     if (!machine_mode) mySerCmd.Print((char *) "INFO: Arm Controller            - ATTACHED\r\n");
-    if (machine_mode) doc["arm_controller"] = "attached";
+    if (machine_mode) json["arm_controller"] = "attached";
   }
 
-  if (machine_mode) { serializeJson(doc, Serial); Serial.println(); }
+  if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
   sendOK();
 }
 
@@ -298,9 +269,15 @@ void Send_Ping(void) {
 // Reports the versions of the boards connected to the Hackerbot
 // Example - "VERSION"
 void Get_Version(void) {
+  JsonDocument json;
+
+  if (machine_mode) json["success"] = "true";
+  if (machine_mode) json["command"] = "version";
+
   if (!machine_mode) mySerCmd.Print((char *) "INFO: Main Controller (v");
   if (!machine_mode) mySerCmd.Print(VERSION_NUMBER);
   if (!machine_mode) mySerCmd.Print((char *) ".0)\r\n");
+  if (machine_mode) json["main_controller"] = VERSION_NUMBER;
   
   if (head_ame_attached) {
     Wire.beginTransmission(AME_I2C_ADDRESS);
@@ -313,6 +290,7 @@ void Get_Version(void) {
     if (!machine_mode) mySerCmd.Print((char *) "INFO: Audio Mouth Eyes (v");
     if (!machine_mode) mySerCmd.Print(RxByte);
     if (!machine_mode) mySerCmd.Print((char *) ".0)\r\n");
+    if (machine_mode) json["audio_mouth_eyes"] = RxByte;
   }
 
   if (head_dyn_attached) {
@@ -327,6 +305,7 @@ void Get_Version(void) {
     if (!machine_mode) mySerCmd.Print((char *) "INFO: Dynamixel Controller (v");
     if (!machine_mode) mySerCmd.Print(RxByte);
     if (!machine_mode) mySerCmd.Print((char *) ".0)\r\n");
+    if (machine_mode) json["dynamixel_controller"] = RxByte;
   }
 
   if (arm_attached) {
@@ -341,8 +320,42 @@ void Get_Version(void) {
     if (!machine_mode) mySerCmd.Print((char *) "INFO: Arm Controller (v");
     if (!machine_mode) mySerCmd.Print(RxByte);
     if (!machine_mode) mySerCmd.Print((char *) ".0)\r\n");
+    if (machine_mode) json["arm_controller"] = RxByte;
   }
 
+  if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+  sendOK();
+}
+
+
+// Set machine mode disabled/enabled command. In machine mode, responses are sent in JSON format
+// Parameters
+// int: active (0 = disable machine mode, 1 = enable machine mode)
+// Example - "MACHINE,1"
+void Set_Machine(void) {
+  JsonDocument json;
+  uint8_t enableParam = 0;
+  
+  if (!mySerCmd.ReadNextUInt8(&enableParam)) {
+    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (machine_mode) json["success"] = "false";
+    if (machine_mode) json["command"] = "machine";
+    if (machine_mode) json["error"] = "Missing parameter";
+    if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+    return;
+  }
+
+  if (enableParam == 0) {
+    machine_mode = false;
+    if (!machine_mode) mySerCmd.Print((char *) "INFO: Machine mode disabled\r\n");
+  } else {
+    machine_mode = true;
+    if (machine_mode) json["success"] = "true";
+    if (machine_mode) json["command"] = "machine";
+    if (machine_mode) json["value"] = "1";
+  }
+
+  if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
   sendOK();
 }
 
@@ -352,21 +365,32 @@ void Get_Version(void) {
 // int: active (0 = disable tofs, 1 = enable tofs)
 // Example - "TOFS,1"
 void Set_Tofs(void) {
+  JsonDocument json;
   uint8_t activeParam = 0;
   
   if (!mySerCmd.ReadNextUInt8(&activeParam)) {
     if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (machine_mode) json["success"] = "false";
+    if (machine_mode) json["command"] = "tofs";
+    if (machine_mode) json["error"] = "Missing parameter";
+    if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
     return;
   }
+
+  if (machine_mode) json["success"] = "true";
+  if (machine_mode) json["command"] = "tofs";
 
   if (activeParam == 0) {
     tofs_active = false;
     if (!machine_mode) mySerCmd.Print((char *) "INFO: Time of Flight sensors disabled\r\n");
+    if (machine_mode) json["value"] = "0";
   } else {
     tofs_active = true;
     if (!machine_mode) mySerCmd.Print((char *) "INFO: Time of Flight sensors enabled\r\n");
+    if (machine_mode) json["value"] = "1";
   }
 
+  if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
   sendOK();
 }
 
@@ -386,6 +410,7 @@ void Send_Handshake(void) {
   Send_Frame(response, sizeof(response));
 
   Get_Packet(response[5]);
+
   sendOK();
 }
 
@@ -423,7 +448,7 @@ void Get_ML(void) {
 }
 
 
-// Set mode to enter. This moves the robot off the dock and starts the LiDAR
+// Set mode to enter. This moves the robot off the jsonk and starts the LiDAR
 // Example - "ENTER"
 void Send_Enter(void) {
   behavior_control_frame[7] = 0x00;
@@ -436,7 +461,7 @@ void Send_Enter(void) {
 }
 
 
-// Set mode to quick map. This moves the robot off the dock and generates an automatic map of your space
+// Set mode to quick map. This moves the robot off the jsonk and generates an automatic map of your space
 // Example - "QUICKMAP"
 void Send_QuickMap(void) {
   behavior_control_frame[7] = 1;
@@ -449,7 +474,7 @@ void Send_QuickMap(void) {
 }
 
 
-// Return to the charger dock and begin charging
+// Return to the charger jsonk and begin charging
 // Example - "DOCK"
 void Send_Dock(void) {
   behavior_control_frame[7] = 6;
@@ -544,13 +569,21 @@ void Send_Goto(void) {
 // bool: left, bool: right
 // Example - "BUMP,1,0"
 void Send_Bump(void) {
+  JsonDocument json;
   uint8_t leftParam = 0;
   uint8_t rightParam = 0;
 
   if (!mySerCmd.ReadNextUInt8(&leftParam) || !mySerCmd.ReadNextUInt8(&rightParam)) {
     if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (machine_mode) json["success"] = "false";
+    if (machine_mode) json["command"] = "bump";
+    if (machine_mode) json["error"] = "Missing parameter";
+    if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
     return;
   }
+
+  if (machine_mode) json["success"] = "true";
+  if (machine_mode) json["command"] = "bump";
 
   // Constrain values to acceptable range and set the value into the frame
   leftParam = constrain(leftParam, 0, 1);
@@ -562,6 +595,10 @@ void Send_Bump(void) {
   if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending sim_bump_frame\r\n");
   Send_Frame(sim_bump_frame, sizeof(sim_bump_frame)/sizeof(sim_bump_frame[0]));
 
+  if (machine_mode) json["left"] = "leftParam";
+  if (machine_mode) json["right"] = "rightParam";
+
+  if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
   sendOK();
 }
 
@@ -571,6 +608,7 @@ void Send_Bump(void) {
 // int16_t: linear_velocity (mm/s), int16_t: angular_velocity (degrees/s)
 // Example - "MOTOR,10,20"
 void Send_Motor(void) {
+  JsonDocument json;
   float linearParam = 0.0;
   float angularParam = 0.0;
 
@@ -579,8 +617,15 @@ void Send_Motor(void) {
 
   if (!mySerCmd.ReadNextFloat(&linearParam) || !mySerCmd.ReadNextFloat(&angularParam)) {
     if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (machine_mode) json["success"] = "false";
+    if (machine_mode) json["command"] = "motor";
+    if (machine_mode) json["error"] = "Missing parameter";
+    if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
     return;
   }
+
+  if (machine_mode) json["success"] = "true";
+  if (machine_mode) json["command"] = "motor";
 
   // Constrain values to acceptable range and set the value into the frame
   linearParam = constrain(linearParam, -100.0, 100.0);
@@ -602,6 +647,10 @@ void Send_Motor(void) {
   if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending wheel_motor_frame\r\n");
   Send_Frame(wheel_motor_frame, sizeof(wheel_motor_frame));
 
+  if (machine_mode) json["linear_velocity"] = "linearParam";
+  if (machine_mode) json["angular_velocity"] = "angularParam";
+
+  if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
   sendOK();
 }
 
@@ -716,7 +765,7 @@ void Get_Pose(void) {
 // -------------------------------------------------------
 // Head Functions
 // -------------------------------------------------------
-void set_IDLE(void) {
+void set_H_IDLE(void) {
   char * sParam;
   sParam = mySerCmd.ReadNext();
 
@@ -753,7 +802,7 @@ void set_IDLE(void) {
 // float: yaw (rotation angle between 100.0 and 260.0 degrees - 180.0 is looking straight ahead)
 // float: pitch (vertical angle between 150.0 and 250.0 degrees - 180.0 is looking straight ahead)
 // Example - "LOOK,180.0,180.0"
-void set_LOOK(void) {
+void set_H_LOOK(void) {
   float turnParam = 0.0;
   float vertParam = 0.0;
   uint8_t speedParam = 0;
@@ -799,7 +848,7 @@ void set_LOOK(void) {
 // float: x (position between -1.0 and 1.0)
 // float: y (position between -1.0 and 1.0)
 // Example - "GAZE,-0.8,0.2"
-void set_GAZE(void) {
+void set_H_GAZE(void) {
   float eyeTargetX = 0.0;
   float eyeTargetY = 0.0;
 
@@ -839,7 +888,7 @@ void set_GAZE(void) {
 // Arm Functions
 // -------------------------------------------------------
 // A_CAL
-void run_CALIBRATION(void) {
+void run_A_CAL(void) {
   if (!machine_mode) mySerCmd.Print((char *) "INFO: Calibrating the gripper\r\n");
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
@@ -851,7 +900,7 @@ void run_CALIBRATION(void) {
 
 
 // A_OPEN
-void set_OPEN(void) {
+void set_A_OPEN(void) {
   if (!machine_mode) mySerCmd.Print((char *) "INFO: Opening the gripper\r\n");
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
@@ -863,7 +912,7 @@ void set_OPEN(void) {
 
 
 // A_CLOSE
-void set_CLOSE(void) {
+void set_A_CLOSE(void) {
   if (!machine_mode) mySerCmd.Print((char *) "INFO: Closing the gripper\r\n");
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
@@ -875,7 +924,7 @@ void set_CLOSE(void) {
 
 
 // A_ANGLE
-void set_ANGLE(void) {
+void set_A_ANGLE(void) {
   uint8_t jointParam = 0;
   float angleParam = 0.0;
   uint8_t speedParam = 0;
@@ -920,7 +969,7 @@ void set_ANGLE(void) {
 
 
 // A_ANGLES
-void set_ANGLES(void) {
+void set_A_ANGLES(void) {
   float joint1Param = 0.0;
   float joint2Param = 0.0;
   float joint3Param = 0.0;
