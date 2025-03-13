@@ -661,6 +661,7 @@ void Send_Motor(void) {
 // int: map_id
 // Example - "GETMAP,2"
 void Get_Map(void) {
+  JsonDocument json;
   uint8_t mapIdParam = 0;
   
   byte getMapFrameResponse[13];
@@ -670,6 +671,10 @@ void Get_Map(void) {
   
   if (!mySerCmd.ReadNextUInt8(&mapIdParam)) {
     if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (machine_mode) json["success"] = "false";
+    if (machine_mode) json["command"] = "getmap";
+    if (machine_mode) json["error"] = "Missing parameter";
+    if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
     return;
   }
 
@@ -682,6 +687,10 @@ void Get_Map(void) {
 
   if (getMapFrameResponse[7] == 0xFF && getMapFrameResponse[8] == 0xFF && getMapFrameResponse[9] == 0xFF && getMapFrameResponse[10] == 0xFF) {
     if (!machine_mode) mySerCmd.Print((char *) "ERROR: Invalid map id!\r\n");
+    if (machine_mode) json["success"] = "false";
+    if (machine_mode) json["command"] = "getmap";
+    if (machine_mode) json["error"] = "Invalid map id";
+    if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
     return;
   }
 
@@ -1050,6 +1059,7 @@ void set_A_ANGLES(void) {
 // General Helper Functions
 // -------------------------------------------------------
 void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfResponseFrame) {
+  JsonDocument json;
   unsigned long responseTimeout = millis();
   const int response_timeout_period = 5000;
 
@@ -1078,6 +1088,9 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
       while (!Serial1.available()) {
         if (millis() - responseTimeout >= response_timeout_period) {
             if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the first header byte in the response packet (0x55)\r\n");
+            if (machine_mode) json["success"] = "false";
+            if (machine_mode) json["error"] = "Timed out while waiting for the first header byte in the response packet (0x55)";
+            if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
             return;
         }
       }
@@ -1093,6 +1106,9 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
           hexString[2] = '\0';
           if (!machine_mode) mySerCmd.Print(hexString);
           if (!machine_mode) mySerCmd.Print((char *) "\r\n");
+          if (machine_mode) json["success"] = "false";
+          if (machine_mode) json["error"] = "WARNING: Unexpected byte received (not 0x55)";
+          if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
         }
       } else {
         incomingPacketLen++;
@@ -1100,6 +1116,9 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
         while (!Serial1.available()) {
           if (millis() - responseTimeout >= response_timeout_period) {
             if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the second header byte in the response packet (0xAA)\r\n");
+            if (machine_mode) json["success"] = "false";
+            if (machine_mode) json["error"] = "Timed out while waiting for the second header byte in the response packet (0xAA)";
+            if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
             return;
           }
         }
@@ -1115,6 +1134,9 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
             hexString[2] = '\0';
             if (!machine_mode) mySerCmd.Print(hexString);
             if (!machine_mode) mySerCmd.Print((char *) "\r\n");
+            if (machine_mode) json["success"] = "false";
+            if (machine_mode) json["error"] = "Unexpected byte received (not 0xAA)";
+            if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
           }
 
           incomingPacketLen = 0;
@@ -1128,6 +1150,9 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
           if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the CTRL_ID in the response packet\r\n");
+          if (machine_mode) json["success"] = "false";
+          if (machine_mode) json["error"] = "Timed out while waiting for the CTRL_ID in the response packet";
+          if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
           return;
       }
     }
@@ -1140,6 +1165,9 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
           if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the LEN_HI in the response packet\r\n");
+          if (machine_mode) json["success"] = "false";
+          if (machine_mode) json["error"] = "Timed out while waiting for the LEN_HI in the response packet";
+          if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
           return;
       }
     }
@@ -1153,6 +1181,9 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
           if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the LEN_LOW in the response packet\r\n");
+          if (machine_mode) json["success"] = "false";
+          if (machine_mode) json["error"] = "Timed out while waiting for the LEN_LOW in the response packet";
+          if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
           return;
       }
     }
@@ -1168,6 +1199,9 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
           if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the PACKET_ID in the response packet\r\n");
+          if (machine_mode) json["success"] = "false";
+          if (machine_mode) json["error"] = "Timed out while waiting for the PACKET_ID in the response packet";
+          if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
           return;
       }
     }
@@ -1182,6 +1216,9 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
       while(!Serial1.available()) {
         if(millis() - responseTimeout >= response_timeout_period) {
             if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the DATA or CRC in the response packet\r\n");
+            if (machine_mode) json["success"] = "false";
+            if (machine_mode) json["error"] = "Timed out while waiting for the DATA or CRC in the response packet";
+            if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
             return;
         }
       }
@@ -1204,6 +1241,9 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
       hexString[2] = '\0';
       if (!machine_mode) mySerCmd.Print(hexString);
       if (!machine_mode) mySerCmd.Print((char *) "\r\n");
+      if (machine_mode) json["success"] = "false";
+      if (machine_mode) json["error"] = "Packet length is too long for the incomingPacket buffer. Throwing out data.";
+      if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
       return;
     }
 
@@ -1255,6 +1295,9 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
   if (response_frame != nullptr) {
     if (incomingPacketLen != sizeOfResponseFrame) {
       if (!machine_mode) mySerCmd.Print((char *) "WARNING: Length of the frame received does not match the length that was specified\r\n");
+      if (machine_mode) json["success"] = "false";
+      if (machine_mode) json["error"] = "Length of the frame received does not match the length that was specified";
+      if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
     }
   }
 }
