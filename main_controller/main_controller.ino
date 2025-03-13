@@ -57,6 +57,7 @@ bool right_tof_obj_detected = false;
 // Function prototypes
 void Get_Packet(byte response_packetid = 0x00, byte response_frame[] = nullptr, int sizeOfResponseFrame = 0);
 void Get_File_Transfer_Packet(byte request_ctrlid = 0x00, uint32_t* currentCRC32 = nullptr, uint32_t* lastCRC32 = nullptr, uint8_t* doneFlag = nullptr);
+void Generate_Machine_Mode_Json(byte response_frame[] = nullptr, int sizeOfResponseFrame = 0);
 
 
 // -------------------------------------------------------
@@ -695,6 +696,7 @@ void Get_Map(void) {
   Send_Frame(ctrl_ota_file_info_resp_frame, sizeof(ctrl_ota_file_info_resp_frame));
   Get_File_Transfer_Packet(0x11);
 
+  if (machine_mode) mySerCmd.Print((char *) "{\"success\":\"true\",\"command\":\"getmap\",\"compressedmapdata\":\"");
 
   // Send CTRL_OTA_FILE_POS_RESP packet
   if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_POS_RESP\r\n");
@@ -713,6 +715,8 @@ void Get_Map(void) {
     Send_Frame(ctrl_ota_file_data_resp_frame, sizeof(ctrl_ota_file_data_resp_frame));
     Get_File_Transfer_Packet(0x12, &currentCRC32, &lastCRC32, &doneFlag);
   }
+
+  if (machine_mode) mySerCmd.Print((char *) "\"}\r\n");
 
   sendOK();
 }
@@ -1246,6 +1250,7 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
   if (!machine_mode) mySerCmd.Print((char *) " (");
   if (!machine_mode) mySerCmd.Print(incomingPacketLen);
   if (!machine_mode) mySerCmd.Print((char *) ")\r\n");
+  if (machine_mode) { Generate_Machine_Mode_Json(incomingPacket, incomingPacketLen); }
 
   if (response_frame != nullptr) {
     if (incomingPacketLen != sizeOfResponseFrame) {
@@ -1435,7 +1440,9 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
       hexString[0] = hexChars[incomingPacket[i] >> 4];
       hexString[1] = hexChars[incomingPacket[i] & 0x0F];
       hexString[2] = '\0';
-      if (!machine_mode) mySerCmd.Print(hexString);
+      //if (!machine_mode) mySerCmd.Print(hexString);
+      mySerCmd.Print(hexString);
+      //if (machine_mode) Serial.print(hexString);
       //if (!machine_mode) mySerCmd.Print((char *) " ");
     }
   }
@@ -1484,6 +1491,50 @@ void Send_Frame(byte frame[], int sizeOfFrame) {
 void Send_Frame_Get_Response(byte frame[], int sizeOfFrame, byte response_frame[], int sizeOfResponseFrame) {
   Send_Frame(frame, sizeOfFrame);
   Get_Packet(frame[5], response_frame, sizeOfResponseFrame);
+}
+
+
+void Generate_Machine_Mode_Json(byte response_frame[], int sizeOfResponseFrame) {
+  JsonDocument json;
+
+  uint8_t packet_id;
+  
+  if (sizeOfResponseFrame < 9 || response_frame[0] != 0x55 || response_frame[1] != 0xAA || response_frame[2] != 0x03) {
+    json["success"] = "false";
+    json["error"] = "Invalid response packet received";
+    serializeJson(json, Serial);
+    Serial.println();
+    return;
+  }
+
+  packet_id = response_frame[5];
+
+  switch (packet_id) {
+    case 0x20: {
+      json["success"] = "true";
+      json["command"] = "getml";
+      json["map_num"] = response_frame[7];
+
+      JsonArray map_ids = json["map_ids"].to<JsonArray>();
+      for (int i = 8; i < (8 + (response_frame[7] * 4)); i += 4) {
+        int value = (response_frame[i]) | (response_frame[i + 1] << 8) | (response_frame[i + 2] << 16) | (response_frame[i + 3] << 24);
+        map_ids.add(value);
+      }
+      break;
+    }
+
+    case 0x21:
+      return;
+      break;
+
+    default: 
+      json["success"] = "false";
+      json["error"] = "Unsupported packet id";
+      break;
+  }
+
+  serializeJson(json, Serial);
+  Serial.println();
 }
 
 
