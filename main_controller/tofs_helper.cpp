@@ -152,7 +152,7 @@ bool compare_result(VL53L7CX *sensor, long calibration_values[]) {
   } while (!NewDataReady);
 
   if ((!status) && (NewDataReady != 0)) {
-    status = sensor_vl53l7cx_right.vl53l7cx_get_ranging_data(&Result);
+    status = sensor->vl53l7cx_get_ranging_data(&Result);
   } else {
     return false;
   }
@@ -192,12 +192,21 @@ bool check_left_sensor() {
     return false;
   }
 
+  // Updated March 13th, 2025 (wall)
   long left_calibration_values[] = {
-    220, 275, 271, 397,
-    125, 406, 450, 390,
-    227, 452, 419, 350,
-    250, 387, 364, 312
+    77, 76, 73, 68, 
+    104, 101, 96, 92, 
+    138, 129, 126, 122, 
+    171, 157, 157, 165
   };
+
+  // Updated March 13th, 2025 (tight)
+  /*long left_calibration_values[] = {
+    34, 43, 52, 55, 
+    60, 78, 89, 94, 
+    105, 132, 140, 138, 
+    226, 193, 190, 174
+  };*/
 
   return compare_result(&sensor_vl53l7cx_left, left_calibration_values);
 }
@@ -212,12 +221,29 @@ bool check_right_sensor() {
     return false;
   }
 
+  // Updated March 13th, 2025 (left_mirrored)
   long right_calibration_values[] = {
-    228, 385, 362, 309,
-    233, 430, 400, 338,
-    235, 259, 438, 375,
-    134, 245, 364, 376
+    171, 157, 157, 165,
+    138, 129, 126, 122,
+    104, 101, 96, 92,
+    77, 76, 73, 68
   };
+
+  // Updated March 13th, 2025 (wall)
+  /*long right_calibration_values[] = {
+    123, 717, 823, 131, 
+    128, 125, 127, 135, 
+    103, 103, 100, 100, 
+    79, 80, 78, 75
+  };*/
+
+  // Updated March 13th, 2025 (tight)
+  /*long right_calibration_values[] = {
+    312, 240, 223, 196, 
+    153, 174, 174, 170, 
+    93, 114, 123, 124, 
+    59, 70, 80, 82
+  };*/
   
   return compare_result(&sensor_vl53l7cx_right, right_calibration_values);
 }
