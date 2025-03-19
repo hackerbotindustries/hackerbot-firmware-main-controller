@@ -2,7 +2,7 @@
 Hackerbot Industries, LLC
 Created By: Ian Bernstein
 Created:    April 2024
-Updated:    2025.03.11
+Updated:    2025.03.18
 
 This sketch is written for the "Main Controller" PCBA. It serves several funtions:
   1) Communicate with the SLAM Base Robot
@@ -28,7 +28,7 @@ Randy  - https://github.com/rbeiter
 #include "SLAM_Base_Frames.h"
 
 // Main Controller software version
-#define VERSION_NUMBER 7
+#define VERSION_NUMBER 8
 
 // Set up the serial command processor
 SerialCmdHelper mySerCmd(Serial);
@@ -596,8 +596,8 @@ void Send_Bump(void) {
   if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending sim_bump_frame\r\n");
   Send_Frame(sim_bump_frame, sizeof(sim_bump_frame)/sizeof(sim_bump_frame[0]));
 
-  if (machine_mode) json["left"] = "leftParam";
-  if (machine_mode) json["right"] = "rightParam";
+  if (machine_mode) json["left"] = leftParam;
+  if (machine_mode) json["right"] = rightParam;
 
   if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
   sendOK();
