@@ -182,12 +182,13 @@ void loop() {
   }
 
   // Check for data coming from the SLAM base robot
-  if (Serial1.available()) {
-  //unsigned int bytesInBuffer = Serial1.available();
-  //if (bytesInBuffer) {
-  //  if (!machine_mode) mySerCmd.Print((char *) "DEBUG: Buffer ");
-  //  if (!machine_mode) mySerCmd.Print(bytesInBuffer);
-  //  if (!machine_mode) mySerCmd.Print((char *) "\r\n");
+  //if (Serial1.available()) {
+  unsigned int bytesInBuffer = Serial1.available();
+  if (bytesInBuffer) {
+    if (bytesInBuffer > 280) {
+      if (!machine_mode) mySerCmd.Print((char *) "WARNING: Serial1 RX buffer (slam base) is close to or already overflowing\r\n");
+      if (machine_mode) mySerCmd.Print((char *) "{\"warning\":\"Serial1 RX buffer (slam base) is close to or already overflowing\"}\r\n");
+    }
     Get_Packet();
   }
 }
