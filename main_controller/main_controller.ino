@@ -2,7 +2,7 @@
 Hackerbot Industries, LLC
 Created By: Ian Bernstein
 Created:    April 2024
-Updated:    2025.03.18
+Updated:    2025.03.31
 
 This sketch is written for the "Main Controller" PCBA. It serves several funtions:
   1) Communicate with the SLAM Base Robot
@@ -28,7 +28,7 @@ Randy  - https://github.com/rbeiter
 #include "SLAM_Base_Frames.h"
 
 // Main Controller software version
-#define VERSION_NUMBER 8
+#define VERSION_NUMBER 9
 
 // Set up the serial command processor
 SerialCmdHelper mySerCmd(Serial);
@@ -1003,11 +1003,11 @@ void set_A_ANGLES(void) {
   }
 
   joint1Param = constrain(joint1Param, -165.0, 165);
-  joint2Param = constrain(joint1Param, -165.0, 165);
-  joint3Param = constrain(joint1Param, -165.0, 165);
-  joint4Param = constrain(joint1Param, -165.0, 165);
-  joint5Param = constrain(joint1Param, -165.0, 165);
-  joint6Param = constrain(joint1Param, -175.0, 175);
+  joint2Param = constrain(joint2Param, -165.0, 165);
+  joint3Param = constrain(joint3Param, -165.0, 165);
+  joint4Param = constrain(joint4Param, -165.0, 165);
+  joint5Param = constrain(joint5Param, -165.0, 165);
+  joint6Param = constrain(joint6Param, -175.0, 175);
   speedParam  = constrain(speedParam, 0, 100);
 
   if (!machine_mode) mySerCmd.Print((char *) "STATUS: Setting the angle of the joints to (1) ");
