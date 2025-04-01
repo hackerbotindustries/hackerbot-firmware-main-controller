@@ -1,10 +1,20 @@
 /*********************************************************************************
-Hackerbot Industries, LLC
-Created: February 2025
+Copyright (c) 2025 Hackerbot Industries LLC
+This source code is licensed under the MIT license found in the LICENSE file in 
+the root directory of this source tree.
 
-A shared library of defines and helper functions used across all of the Hackerbot
-controller PCBs (main, dynamixel, audio/mouth/eyes, eyes, and arm)
+Created By: Ian Bernstein
+Created:    February 2025
+Updated:    April 1, 2025
+
+This file contains shared definitions and helper functions used across all of the
+Hackerbot controller PCBs (main, dynamixel, audio/mouth/eyes, eyes, and arm)
+
+Special thanks to the following for their code contributions to this codebase:
+Ian Bernstein - https://github.com/arobodude
+Randy Beiter - https://github.com/rbeiter
 *********************************************************************************/
+
 
 #ifndef HACKERBOTSHARED_H
 #define HACKERBOTSHARED_H
