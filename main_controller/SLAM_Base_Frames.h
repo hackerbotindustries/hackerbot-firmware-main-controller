@@ -1,8 +1,13 @@
 /*********************************************************************************
 Hackerbot Industries, LLC
-Created: February 2025
+Created By: Ian Bernstein
+Created:    February 2025
+Updated:    April 1, 2025
 
-All of the command frames for the SLAM base robot
+This file contains all of the command frames for the SLAM base robot
+
+Special thanks to the following for their code contributions to this codebase:
+Ian Bernstein - https://github.com/arobodude
 *********************************************************************************/
 
 #ifndef SLAMBASEFRAMES_H

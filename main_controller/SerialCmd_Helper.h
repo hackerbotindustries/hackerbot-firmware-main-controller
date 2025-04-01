@@ -1,9 +1,16 @@
 /*********************************************************************************
 Hackerbot Industries, LLC
-Created: February 2025
+Created By: Ian Bernstein
+Created:    April 2024
+Updated:    April 1, 2025
 
-Adds some supplimental helper functions related to the SerialCmd libary
+This file adds some supplimental helper functions related to the SerialCmd libary
+
+Special thanks to the following for their code contributions to this codebase:
+Ian Bernstein - https://github.com/arobodude
+Randy Beiter - https://github.com/rbeiter
 *********************************************************************************/
+
 
 #ifndef SERIALCMDHELPER_H
 #define SERIALCMDHELPER_H

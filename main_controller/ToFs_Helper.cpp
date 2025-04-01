@@ -1,10 +1,16 @@
 /*********************************************************************************
 Hackerbot Industries, LLC
-Created: February 2025
+Created By: Ian Bernstein
+Created:    February 2025
+Updated:    April 1, 2025
 
-Configuration and helper functions for the time of flight sensors that are on
+This file contains configuration and helper functions for the time of flight sensors that are on
 most Hackerbot models so that the robot can avoid obstacles taller than the 
 built in bump and LiDAR sensors can "see"
+
+Special thanks to the following for their code contributions to this codebase:
+Ian Bernstein - https://github.com/arobodude
+Randy Beiter - https://github.com/rbeiter
 *********************************************************************************/
 
 #include <Wire.h>

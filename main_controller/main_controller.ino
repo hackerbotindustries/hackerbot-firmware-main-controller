@@ -2,7 +2,7 @@
 Hackerbot Industries, LLC
 Created By: Ian Bernstein
 Created:    April 2024
-Updated:    2025.03.31
+Updated:    April 1, 2025
 
 This sketch is written for the "Main Controller" PCBA. It serves several funtions:
   1) Communicate with the SLAM Base Robot
@@ -12,9 +12,11 @@ This sketch is written for the "Main Controller" PCBA. It serves several funtion
   5) Handle user code for any user added I2C devices (eg QWIIC or STEMMA sensors)
 
 Special thanks to the following for their code contributions to this codebase:
-Skylar - https://github.com/SkylarCastator
-Randy  - https://github.com/rbeiter
+Ian Bernstein - https://github.com/arobodude
+Skylar Castator - https://github.com/SkylarCastator
+Randy Beiter - https://github.com/rbeiter
 *********************************************************************************/
+
 
 #include <Wire.h>
 #include <SerialCmd.h>
