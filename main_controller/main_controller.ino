@@ -30,7 +30,7 @@ Randy Beiter - https://github.com/rbeiter
 #include "SLAM_Base_Frames.h"
 
 // Main Controller software version
-#define VERSION_NUMBER 9
+#define VERSION_NUMBER 10
 
 // Set up the serial command processor
 SerialCmdHelper mySerCmd(Serial);
@@ -87,19 +87,19 @@ void setup() {
   mySerCmd.AddCmd("VERSION", SERIALCMD_FROMALL, Get_Version);
   mySerCmd.AddCmd("JSON", SERIALCMD_FROMALL, Set_Json);
   mySerCmd.AddCmd("TOFS", SERIALCMD_FROMALL, Set_Tofs);
-  mySerCmd.AddCmd("INIT", SERIALCMD_FROMALL, Send_Handshake);
-  mySerCmd.AddCmd("MODE", SERIALCMD_FROMALL, Send_Mode);
-  mySerCmd.AddCmd("ENTER", SERIALCMD_FROMALL, Send_Enter);
-  mySerCmd.AddCmd("QUICKMAP", SERIALCMD_FROMALL, Send_QuickMap);
-  mySerCmd.AddCmd("GOTO", SERIALCMD_FROMALL, Send_Goto);
-  mySerCmd.AddCmd("DOCK", SERIALCMD_FROMALL, Send_Dock);
-  mySerCmd.AddCmd("STOP", SERIALCMD_FROMALL, Send_Stop);
-  mySerCmd.AddCmd("BUMP", SERIALCMD_FROMALL, Send_Bump);
-  mySerCmd.AddCmd("MOTOR", SERIALCMD_FROMALL, Send_Motor);  
-  mySerCmd.AddCmd("GETML", SERIALCMD_FROMALL, Get_ML);
-  mySerCmd.AddCmd("GETMAP", SERIALCMD_FROMALL, Get_Map);
-  mySerCmd.AddCmd("STATUS", SERIALCMD_FROMALL, Get_Status);
-  mySerCmd.AddCmd("POSE", SERIALCMD_FROMALL, Get_Pose);
+  mySerCmd.AddCmd("B_INIT", SERIALCMD_FROMALL, Send_Handshake);
+  mySerCmd.AddCmd("B_MODE", SERIALCMD_FROMALL, Send_Mode);
+  mySerCmd.AddCmd("B_START", SERIALCMD_FROMALL, Send_Start);
+  mySerCmd.AddCmd("B_QUICKMAP", SERIALCMD_FROMALL, Send_QuickMap);
+  mySerCmd.AddCmd("B_GOTO", SERIALCMD_FROMALL, Send_Goto);
+  mySerCmd.AddCmd("B_DOCK", SERIALCMD_FROMALL, Send_Dock);
+  mySerCmd.AddCmd("B_KILL", SERIALCMD_FROMALL, Send_Kill);
+  mySerCmd.AddCmd("B_BUMP", SERIALCMD_FROMALL, Send_Bump);
+  mySerCmd.AddCmd("B_DRIVE", SERIALCMD_FROMALL, Send_Drive);  
+  mySerCmd.AddCmd("B_MAPLIST", SERIALCMD_FROMALL, Get_Maplist);
+  mySerCmd.AddCmd("B_MAPDATA", SERIALCMD_FROMALL, Get_Mapdata);
+  mySerCmd.AddCmd("B_STATUS", SERIALCMD_FROMALL, Get_Status);
+  mySerCmd.AddCmd("B_POSE", SERIALCMD_FROMALL, Get_Pose);
 
   // Head Commands
   mySerCmd.AddCmd("H_IDLE", SERIALCMD_FROMALL, set_H_IDLE);
@@ -399,7 +399,7 @@ void Set_Tofs(void) {
 
 
 // Initializes the connection between the Arduino on the Main Controller with the SLAM vacuum base robot. This must be run once after a power cycle before any other commands can be sent
-// Example - "INIT"
+// Example - "B_INIT"
 void Send_Handshake(void) {
   byte response[88];
 
@@ -419,7 +419,7 @@ void Send_Handshake(void) {
 
 
 // Set mode control to idle.
-// Example - "MODE"
+// Example - "B_MODE"
 void Send_Mode(void) {
   uint8_t modeParam = 0;
 
@@ -441,8 +441,8 @@ void Send_Mode(void) {
 
 
 // Gets a list of all of the maps stored on the robot
-// Example - "GETML"
-void Get_ML(void) {
+// Example - "B_MAPLIST"
+void Get_Maplist(void) {
   if (!json_mode) mySerCmd.Print((char *) "INFO: Sending get_map_list_frame\r\n");
   Send_Frame(get_map_list_frame, sizeof(get_map_list_frame));
 
@@ -451,9 +451,9 @@ void Get_ML(void) {
 }
 
 
-// Set mode to enter. This moves the robot off the jsonk and starts the LiDAR
-// Example - "ENTER"
-void Send_Enter(void) {
+// Set mode to starting mode. This moves the robot off the jsonk and starts the LiDAR
+// Example - "B_START"
+void Send_Start(void) {
   behavior_control_frame[7] = 0x00;
 
   if (!json_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (ENTER)\r\n");
@@ -465,7 +465,7 @@ void Send_Enter(void) {
 
 
 // Set mode to quick map. This moves the robot off the jsonk and generates an automatic map of your space
-// Example - "QUICKMAP"
+// Example - "B_QUICKMAP"
 void Send_QuickMap(void) {
   behavior_control_frame[7] = 1;
 
@@ -478,7 +478,7 @@ void Send_QuickMap(void) {
 
 
 // Return to the charger jsonk and begin charging
-// Example - "DOCK"
+// Example - "B_DOCK"
 void Send_Dock(void) {
   behavior_control_frame[7] = 6;
 
@@ -491,8 +491,8 @@ void Send_Dock(void) {
 
 
 // Send a stop command to the base
-// Example - "STOP"
-void Send_Stop(void) {
+// Example - "B_KILL"
+void Send_Kill(void) {
   behavior_control_frame[7] = 7;
 
   if (!json_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (STOP)\r\n");
@@ -506,7 +506,7 @@ void Send_Stop(void) {
 // Go to pose command. Must have a map created first.
 // Parameters
 // float: x (meters), float: y (meters), float: angle (degrees), float: speed (m/s)
-// Example - "GOTO,0.5,0.5,0,10"
+// Example - "B_GOTO,0.5,0.5,0,10"
 void Send_Goto(void) {
   float xParam = 0.0;
   float yParam = 0.0;
@@ -570,7 +570,7 @@ void Send_Goto(void) {
 // Simulated bumper command
 // Parameters
 // bool: left, bool: right
-// Example - "BUMP,1,0"
+// Example - "B_BUMP,1,0"
 void Send_Bump(void) {
   JsonDocument json;
   uint8_t leftParam = 0;
@@ -609,8 +609,8 @@ void Send_Bump(void) {
 // Wheel motor packet
 // Parameters
 // int16_t: linear_velocity (mm/s), int16_t: angular_velocity (degrees/s)
-// Example - "MOTOR,10,20"
-void Send_Motor(void) {
+// Example - "B_DRIVE,10,20"
+void Send_Drive(void) {
   JsonDocument json;
   float linearParam = 0.0;
   float angularParam = 0.0;
@@ -661,8 +661,8 @@ void Send_Motor(void) {
 // Get map command. Must have a map created first.
 // Parameters
 // int: map_id
-// Example - "GETMAP,2"
-void Get_Map(void) {
+// Example - "B_MAPDATA,2"
+void Get_Mapdata(void) {
   JsonDocument json;
   uint8_t mapIdParam = 0;
   
@@ -734,7 +734,7 @@ void Get_Map(void) {
 
 
 // Get the latest saved synchonous packet
-// Example - "STATUS"
+// Example - "B_STATUS"
 void Get_Status(void) {
   char hexString[3];
   const char hexChars[] = "0123456789ABCDEF";
@@ -756,7 +756,7 @@ void Get_Status(void) {
 
 
 // Get the latest saved pose packet
-// Example - "POSE"
+// Example - "B_POSE"
 void Get_Pose(void) {
   char hexString[3];
   const char hexChars[] = "0123456789ABCDEF";
