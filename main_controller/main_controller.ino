@@ -49,7 +49,7 @@ bool tofs_attached = false;
 bool temperature_sensor_attached = false;
 
 bool tofs_active = true;
-bool machine_mode = false;
+bool json_mode = false;
 
 unsigned long previousTofMillis = millis();
 bool read_left_tof_toggle = true;
@@ -59,7 +59,7 @@ bool right_tof_obj_detected = false;
 // Function prototypes
 void Get_Packet(byte response_packetid = 0x00, byte response_frame[] = nullptr, int sizeOfResponseFrame = 0);
 void Get_File_Transfer_Packet(byte request_ctrlid = 0x00, uint32_t* currentCRC32 = nullptr, uint32_t* lastCRC32 = nullptr, uint8_t* doneFlag = nullptr);
-void Generate_Machine_Mode_Json(byte response_frame[] = nullptr, int sizeOfResponseFrame = 0);
+void Generate_Json_Mode(byte response_frame[] = nullptr, int sizeOfResponseFrame = 0);
 
 
 // -------------------------------------------------------
@@ -75,8 +75,8 @@ void setup() {
 
   delay(1000);
 
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Initalizing application...\r\n");
-  if (!machine_mode) mySerCmd.Print((char *) "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Initalizing application...\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n");
 
   onboard_pixel.begin();
   onboard_pixel.setPixelColor(0, onboard_pixel.Color(0, 0, 10));
@@ -133,8 +133,8 @@ void setup() {
   onboard_pixel.setPixelColor(0, onboard_pixel.Color(0, 10, 0));
   onboard_pixel.show();
 
-  if (!machine_mode) mySerCmd.Print((char *) "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n");
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Starting application...\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Starting application...\r\n");
 }
 
 
@@ -164,13 +164,13 @@ void loop() {
         right_tof_obj_detected = check_right_sensor();
 
         if (left_tof_obj_detected && right_tof_obj_detected) {
-          if (!machine_mode) mySerCmd.Print((char *) "INFO: Both ToFs detect an obstacle\r\n");
+          if (!json_mode) mySerCmd.Print((char *) "INFO: Both ToFs detect an obstacle\r\n");
           ret = mySerCmd.ReadString((char *) "BUMP,1,1");
         } else if (left_tof_obj_detected) {
-          if (!machine_mode) mySerCmd.Print((char *) "INFO: Left ToF detects an obstacle\r\n");
+          if (!json_mode) mySerCmd.Print((char *) "INFO: Left ToF detects an obstacle\r\n");
           ret = mySerCmd.ReadString((char *) "BUMP,0,1");
         } else if (right_tof_obj_detected) {
-          if (!machine_mode) mySerCmd.Print((char *) "INFO: Right ToF detects an obstacle\r\n");
+          if (!json_mode) mySerCmd.Print((char *) "INFO: Right ToF detects an obstacle\r\n");
           ret = mySerCmd.ReadString((char *) "BUMP,1,0");
         }
       }
@@ -180,16 +180,16 @@ void loop() {
   // Check for incoming serial commands
   ret = mySerCmd.ReadSer();
   if (ret == 0) {
-    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Unrecognized command\r\n");
+    if (!json_mode) mySerCmd.Print((char *) "ERROR: Unrecognized command\r\n");
   }
 
   // Check for data coming from the SLAM base robot
   if (Serial1.available()) {
   //unsigned int bytesInBuffer = Serial1.available();
   //if (bytesInBuffer) {
-  //  if (!machine_mode) mySerCmd.Print((char *) "DEBUG: Buffer ");
-  //  if (!machine_mode) mySerCmd.Print(bytesInBuffer);
-  //  if (!machine_mode) mySerCmd.Print((char *) "\r\n");
+  //  if (!json_mode) mySerCmd.Print((char *) "DEBUG: Buffer ");
+  //  if (!json_mode) mySerCmd.Print(bytesInBuffer);
+  //  if (!json_mode) mySerCmd.Print((char *) "\r\n");
     Get_Packet();
   }
 }
@@ -199,7 +199,7 @@ void loop() {
 // General SerialCmd Functions
 // -------------------------------------------------------
 void sendOK(void) {
-  if (!machine_mode) mySerCmd.Print((char *) "OK\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "OK\r\n");
 }
 
 
@@ -209,62 +209,62 @@ void sendOK(void) {
 void Send_Ping(void) {
   JsonDocument json;
 
-  if (machine_mode) json["success"] = "true";
-  if (machine_mode) json["command"] = "ping";
+  if (json_mode) json["success"] = "true";
+  if (json_mode) json["command"] = "ping";
 
-  if (!machine_mode) mySerCmd.Print((char *)   "INFO: Main Controller           - ATTACHED\r\n");
-  if (machine_mode) json["main_controller"] = "attached";
+  if (!json_mode) mySerCmd.Print((char *)   "INFO: Main Controller           - ATTACHED\r\n");
+  if (json_mode) json["main_controller"] = "attached";
 
   Wire.beginTransmission(TEMP_SENSOR_I2C_ADDRESS);
   if (Wire.endTransmission () == 0) {
     temperature_sensor_attached = true;
-    if (!machine_mode) mySerCmd.Print((char *) "INFO: Temperature Sensor        - ATTACHED\r\n");
-    if (machine_mode) json["temperature_sensor"] = "attached";
+    if (!json_mode) mySerCmd.Print((char *) "INFO: Temperature Sensor        - ATTACHED\r\n");
+    if (json_mode) json["temperature_sensor"] = "attached";
   }
 
   Wire.beginTransmission(TOFS_DEFAULT_I2C_ADDRESS);
   if (Wire.endTransmission () == 0) {
     tofs_attached = true;
-    if (!machine_mode) mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - ATTACHED (not configured)\r\n");
-    if (machine_mode) json["tofs"] = "attached";
+    if (!json_mode) mySerCmd.Print((char *) "INFO: Time of Flight Sensors    - ATTACHED (not configured)\r\n");
+    if (json_mode) json["tofs"] = "attached";
   } else {
     Wire.beginTransmission(TOF_LEFT_I2C_ADDRESS);
     if (Wire.endTransmission () == 0) {
       tofs_attached = true;
-      if (!machine_mode) mySerCmd.Print((char *) "INFO: Left ToF Sensor           - ATTACHED\r\n");
-      if (machine_mode) json["left_tof"] = "attached";
+      if (!json_mode) mySerCmd.Print((char *) "INFO: Left ToF Sensor           - ATTACHED\r\n");
+      if (json_mode) json["left_tof"] = "attached";
     }
 
     Wire.beginTransmission(TOF_RIGHT_I2C_ADDRESS);
     if (Wire.endTransmission () == 0) {
       tofs_attached = true;
-      if (!machine_mode) mySerCmd.Print((char *) "INFO: Right ToF Sensor          - ATTACHED\r\n");
-      if (machine_mode) json["right_tof"] = "attached";
+      if (!json_mode) mySerCmd.Print((char *) "INFO: Right ToF Sensor          - ATTACHED\r\n");
+      if (json_mode) json["right_tof"] = "attached";
     }
   }
 
   Wire.beginTransmission(AME_I2C_ADDRESS); // Head Mouth Eyes PCBA
   if (Wire.endTransmission () == 0) {
     head_ame_attached = true;
-    if (!machine_mode) mySerCmd.Print((char *) "INFO: Audio/Mouth/Eyes PCBA     - ATTACHED\r\n");
-    if (machine_mode) json["audio_mouth_eyes"] = "attached";
+    if (!json_mode) mySerCmd.Print((char *) "INFO: Audio/Mouth/Eyes PCBA     - ATTACHED\r\n");
+    if (json_mode) json["audio_mouth_eyes"] = "attached";
   }
 
   Wire.beginTransmission(DYN_I2C_ADDRESS); // Dynamixel Contoller PCBA
   if (Wire.endTransmission () == 0) {
     head_dyn_attached = true;
-    if (!machine_mode) mySerCmd.Print((char *) "INFO: Head Dynamixel Controller - ATTACHED\r\n");
-    if (machine_mode) json["dynamixel_controller"] = "attached";
+    if (!json_mode) mySerCmd.Print((char *) "INFO: Head Dynamixel Controller - ATTACHED\r\n");
+    if (json_mode) json["dynamixel_controller"] = "attached";
   }
 
   Wire.beginTransmission(ARM_I2C_ADDRESS); // Arm Controller PCBA
   if (Wire.endTransmission () == 0) {
     arm_attached = true;
-    if (!machine_mode) mySerCmd.Print((char *) "INFO: Arm Controller            - ATTACHED\r\n");
-    if (machine_mode) json["arm_controller"] = "attached";
+    if (!json_mode) mySerCmd.Print((char *) "INFO: Arm Controller            - ATTACHED\r\n");
+    if (json_mode) json["arm_controller"] = "attached";
   }
 
-  if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+  if (json_mode) { serializeJson(json, Serial); Serial.println(); }
   sendOK();
 }
 
@@ -274,13 +274,13 @@ void Send_Ping(void) {
 void Get_Version(void) {
   JsonDocument json;
 
-  if (machine_mode) json["success"] = "true";
-  if (machine_mode) json["command"] = "version";
+  if (json_mode) json["success"] = "true";
+  if (json_mode) json["command"] = "version";
 
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Main Controller (v");
-  if (!machine_mode) mySerCmd.Print(VERSION_NUMBER);
-  if (!machine_mode) mySerCmd.Print((char *) ".0)\r\n");
-  if (machine_mode) json["main_controller"] = VERSION_NUMBER;
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Main Controller (v");
+  if (!json_mode) mySerCmd.Print(VERSION_NUMBER);
+  if (!json_mode) mySerCmd.Print((char *) ".0)\r\n");
+  if (json_mode) json["main_controller"] = VERSION_NUMBER;
   
   if (head_ame_attached) {
     Wire.beginTransmission(AME_I2C_ADDRESS);
@@ -290,10 +290,10 @@ void Get_Version(void) {
     while(Wire.available()) {
       RxByte = Wire.read();
     }
-    if (!machine_mode) mySerCmd.Print((char *) "INFO: Audio Mouth Eyes (v");
-    if (!machine_mode) mySerCmd.Print(RxByte);
-    if (!machine_mode) mySerCmd.Print((char *) ".0)\r\n");
-    if (machine_mode) json["audio_mouth_eyes"] = RxByte;
+    if (!json_mode) mySerCmd.Print((char *) "INFO: Audio Mouth Eyes (v");
+    if (!json_mode) mySerCmd.Print(RxByte);
+    if (!json_mode) mySerCmd.Print((char *) ".0)\r\n");
+    if (json_mode) json["audio_mouth_eyes"] = RxByte;
   }
 
   if (head_dyn_attached) {
@@ -305,10 +305,10 @@ void Get_Version(void) {
     while(Wire.available()) {
       RxByte = Wire.read();
     }
-    if (!machine_mode) mySerCmd.Print((char *) "INFO: Dynamixel Controller (v");
-    if (!machine_mode) mySerCmd.Print(RxByte);
-    if (!machine_mode) mySerCmd.Print((char *) ".0)\r\n");
-    if (machine_mode) json["dynamixel_controller"] = RxByte;
+    if (!json_mode) mySerCmd.Print((char *) "INFO: Dynamixel Controller (v");
+    if (!json_mode) mySerCmd.Print(RxByte);
+    if (!json_mode) mySerCmd.Print((char *) ".0)\r\n");
+    if (json_mode) json["dynamixel_controller"] = RxByte;
   }
 
   if (arm_attached) {
@@ -320,13 +320,13 @@ void Get_Version(void) {
     while(Wire.available()) {
       RxByte = Wire.read();
     }
-    if (!machine_mode) mySerCmd.Print((char *) "INFO: Arm Controller (v");
-    if (!machine_mode) mySerCmd.Print(RxByte);
-    if (!machine_mode) mySerCmd.Print((char *) ".0)\r\n");
-    if (machine_mode) json["arm_controller"] = RxByte;
+    if (!json_mode) mySerCmd.Print((char *) "INFO: Arm Controller (v");
+    if (!json_mode) mySerCmd.Print(RxByte);
+    if (!json_mode) mySerCmd.Print((char *) ".0)\r\n");
+    if (json_mode) json["arm_controller"] = RxByte;
   }
 
-  if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+  if (json_mode) { serializeJson(json, Serial); Serial.println(); }
   sendOK();
 }
 
@@ -340,25 +340,25 @@ void Set_Machine(void) {
   uint8_t enableParam = 0;
   
   if (!mySerCmd.ReadNextUInt8(&enableParam)) {
-    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
-    if (machine_mode) json["success"] = "false";
-    if (machine_mode) json["command"] = "machine";
-    if (machine_mode) json["error"] = "Missing parameter";
-    if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+    if (!json_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (json_mode) json["success"] = "false";
+    if (json_mode) json["command"] = "machine";
+    if (json_mode) json["error"] = "Missing parameter";
+    if (json_mode) { serializeJson(json, Serial); Serial.println(); }
     return;
   }
 
   if (enableParam == 0) {
-    machine_mode = false;
-    if (!machine_mode) mySerCmd.Print((char *) "INFO: Machine mode disabled\r\n");
+    json_mode = false;
+    if (!json_mode) mySerCmd.Print((char *) "INFO: Machine mode disabled\r\n");
   } else {
-    machine_mode = true;
-    if (machine_mode) json["success"] = "true";
-    if (machine_mode) json["command"] = "machine";
-    if (machine_mode) json["value"] = "1";
+    json_mode = true;
+    if (json_mode) json["success"] = "true";
+    if (json_mode) json["command"] = "machine";
+    if (json_mode) json["value"] = "1";
   }
 
-  if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+  if (json_mode) { serializeJson(json, Serial); Serial.println(); }
   sendOK();
 }
 
@@ -372,28 +372,28 @@ void Set_Tofs(void) {
   uint8_t activeParam = 0;
   
   if (!mySerCmd.ReadNextUInt8(&activeParam)) {
-    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
-    if (machine_mode) json["success"] = "false";
-    if (machine_mode) json["command"] = "tofs";
-    if (machine_mode) json["error"] = "Missing parameter";
-    if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+    if (!json_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (json_mode) json["success"] = "false";
+    if (json_mode) json["command"] = "tofs";
+    if (json_mode) json["error"] = "Missing parameter";
+    if (json_mode) { serializeJson(json, Serial); Serial.println(); }
     return;
   }
 
-  if (machine_mode) json["success"] = "true";
-  if (machine_mode) json["command"] = "tofs";
+  if (json_mode) json["success"] = "true";
+  if (json_mode) json["command"] = "tofs";
 
   if (activeParam == 0) {
     tofs_active = false;
-    if (!machine_mode) mySerCmd.Print((char *) "INFO: Time of Flight sensors disabled\r\n");
-    if (machine_mode) json["value"] = "0";
+    if (!json_mode) mySerCmd.Print((char *) "INFO: Time of Flight sensors disabled\r\n");
+    if (json_mode) json["value"] = "0";
   } else {
     tofs_active = true;
-    if (!machine_mode) mySerCmd.Print((char *) "INFO: Time of Flight sensors enabled\r\n");
-    if (machine_mode) json["value"] = "1";
+    if (!json_mode) mySerCmd.Print((char *) "INFO: Time of Flight sensors enabled\r\n");
+    if (json_mode) json["value"] = "1";
   }
 
-  if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+  if (json_mode) { serializeJson(json, Serial); Serial.println(); }
   sendOK();
 }
 
@@ -403,13 +403,13 @@ void Set_Tofs(void) {
 void Send_Handshake(void) {
   byte response[88];
 
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending handshake_frame\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Sending handshake_frame\r\n");
   Send_Frame_Get_Response(handshake_frame, sizeof(handshake_frame), response, sizeof(response));
 
   response[2] = 0x02;
   response[4] = 0x51;
 
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending handshake acknowledgement frame\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Sending handshake acknowledgement frame\r\n");
   Send_Frame(response, sizeof(response));
 
   Get_Packet(response[5]);
@@ -424,7 +424,7 @@ void Send_Mode(void) {
   uint8_t modeParam = 0;
 
   if (!mySerCmd.ReadNextUInt8(&modeParam)) {
-    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (!json_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
@@ -432,7 +432,7 @@ void Send_Mode(void) {
   modeParam = constrain(modeParam, 0, 12);
   mode_control_frame[7] = modeParam;
 
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending mode_control_frame\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Sending mode_control_frame\r\n");
   Send_Frame(mode_control_frame, sizeof(mode_control_frame));
 
   Get_Packet(mode_control_frame[5]);
@@ -443,7 +443,7 @@ void Send_Mode(void) {
 // Gets a list of all of the maps stored on the robot
 // Example - "GETML"
 void Get_ML(void) {
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending get_map_list_frame\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Sending get_map_list_frame\r\n");
   Send_Frame(get_map_list_frame, sizeof(get_map_list_frame));
 
   Get_Packet(get_map_list_frame[5]);
@@ -456,7 +456,7 @@ void Get_ML(void) {
 void Send_Enter(void) {
   behavior_control_frame[7] = 0x00;
 
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (ENTER)\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (ENTER)\r\n");
   Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
 
   Get_Packet(behavior_control_frame[5]);
@@ -469,7 +469,7 @@ void Send_Enter(void) {
 void Send_QuickMap(void) {
   behavior_control_frame[7] = 1;
 
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (QUICKMAP)\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (QUICKMAP)\r\n");
   Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
 
   Get_Packet(behavior_control_frame[5]);
@@ -482,7 +482,7 @@ void Send_QuickMap(void) {
 void Send_Dock(void) {
   behavior_control_frame[7] = 6;
 
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (DOCK)\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (DOCK)\r\n");
   Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
 
   Get_Packet(behavior_control_frame[5]);
@@ -495,7 +495,7 @@ void Send_Dock(void) {
 void Send_Stop(void) {
   behavior_control_frame[7] = 7;
 
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (STOP)\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (STOP)\r\n");
   Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
 
   Get_Packet(behavior_control_frame[5]);
@@ -514,7 +514,7 @@ void Send_Goto(void) {
   float sParam = 0.0;
 
   if (!mySerCmd.ReadNextFloat(&xParam) || !mySerCmd.ReadNextFloat(&yParam) || !mySerCmd.ReadNextFloat(&aParam) || !mySerCmd.ReadNextFloat(&sParam)) {
-    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (!json_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
@@ -559,7 +559,7 @@ void Send_Goto(void) {
   behavior_control_frame[23] = sParamHex[2];
   behavior_control_frame[24] = sParamHex[3];
 
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (GOTO)\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (GOTO)\r\n");
   Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
 
   Get_Packet(behavior_control_frame[5]);
@@ -577,16 +577,16 @@ void Send_Bump(void) {
   uint8_t rightParam = 0;
 
   if (!mySerCmd.ReadNextUInt8(&leftParam) || !mySerCmd.ReadNextUInt8(&rightParam)) {
-    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
-    if (machine_mode) json["success"] = "false";
-    if (machine_mode) json["command"] = "bump";
-    if (machine_mode) json["error"] = "Missing parameter";
-    if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+    if (!json_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (json_mode) json["success"] = "false";
+    if (json_mode) json["command"] = "bump";
+    if (json_mode) json["error"] = "Missing parameter";
+    if (json_mode) { serializeJson(json, Serial); Serial.println(); }
     return;
   }
 
-  if (machine_mode) json["success"] = "true";
-  if (machine_mode) json["command"] = "bump";
+  if (json_mode) json["success"] = "true";
+  if (json_mode) json["command"] = "bump";
 
   // Constrain values to acceptable range and set the value into the frame
   leftParam = constrain(leftParam, 0, 1);
@@ -595,13 +595,13 @@ void Send_Bump(void) {
   // binary: 0, 0, 0, 0, 0, 0, left, right
   sim_bump_frame[7] = (leftParam << 1) | rightParam;
 
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending sim_bump_frame\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Sending sim_bump_frame\r\n");
   Send_Frame(sim_bump_frame, sizeof(sim_bump_frame)/sizeof(sim_bump_frame[0]));
 
-  if (machine_mode) json["left"] = leftParam;
-  if (machine_mode) json["right"] = rightParam;
+  if (json_mode) json["left"] = leftParam;
+  if (json_mode) json["right"] = rightParam;
 
-  if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+  if (json_mode) { serializeJson(json, Serial); Serial.println(); }
   sendOK();
 }
 
@@ -619,16 +619,16 @@ void Send_Motor(void) {
   int16_t angularParam16 = 0;
 
   if (!mySerCmd.ReadNextFloat(&linearParam) || !mySerCmd.ReadNextFloat(&angularParam)) {
-    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
-    if (machine_mode) json["success"] = "false";
-    if (machine_mode) json["command"] = "motor";
-    if (machine_mode) json["error"] = "Missing parameter";
-    if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+    if (!json_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (json_mode) json["success"] = "false";
+    if (json_mode) json["command"] = "motor";
+    if (json_mode) json["error"] = "Missing parameter";
+    if (json_mode) { serializeJson(json, Serial); Serial.println(); }
     return;
   }
 
-  if (machine_mode) json["success"] = "true";
-  if (machine_mode) json["command"] = "motor";
+  if (json_mode) json["success"] = "true";
+  if (json_mode) json["command"] = "motor";
 
   // Constrain values to acceptable range and set the value into the frame
   linearParam = constrain(linearParam, -100.0, 100.0);
@@ -647,13 +647,13 @@ void Send_Motor(void) {
   wheel_motor_frame[9]  = lowByte(angularParam16);
   wheel_motor_frame[10] = highByte(angularParam16);
 
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending wheel_motor_frame\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Sending wheel_motor_frame\r\n");
   Send_Frame(wheel_motor_frame, sizeof(wheel_motor_frame));
 
-  if (machine_mode) json["linear_velocity"] = "linearParam";
-  if (machine_mode) json["angular_velocity"] = "angularParam";
+  if (json_mode) json["linear_velocity"] = "linearParam";
+  if (json_mode) json["angular_velocity"] = "angularParam";
 
-  if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+  if (json_mode) { serializeJson(json, Serial); Serial.println(); }
   sendOK();
 }
 
@@ -672,11 +672,11 @@ void Get_Map(void) {
   uint8_t doneFlag = 0;
   
   if (!mySerCmd.ReadNextUInt8(&mapIdParam)) {
-    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
-    if (machine_mode) json["success"] = "false";
-    if (machine_mode) json["command"] = "getmap";
-    if (machine_mode) json["error"] = "Missing parameter";
-    if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+    if (!json_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (json_mode) json["success"] = "false";
+    if (json_mode) json["command"] = "getmap";
+    if (json_mode) json["error"] = "Missing parameter";
+    if (json_mode) { serializeJson(json, Serial); Serial.println(); }
     return;
   }
 
@@ -684,33 +684,33 @@ void Get_Map(void) {
   mapIdParam = constrain(mapIdParam, 1, 255);
   get_map_frame[7] = mapIdParam;
 
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending get_map_frame\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Sending get_map_frame\r\n");
   Send_Frame_Get_Response(get_map_frame, sizeof(get_map_frame), getMapFrameResponse, sizeof(getMapFrameResponse));
 
   if (getMapFrameResponse[7] == 0xFF && getMapFrameResponse[8] == 0xFF && getMapFrameResponse[9] == 0xFF && getMapFrameResponse[10] == 0xFF) {
-    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Invalid map id!\r\n");
-    if (machine_mode) json["success"] = "false";
-    if (machine_mode) json["command"] = "getmap";
-    if (machine_mode) json["error"] = "Invalid map id";
-    if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+    if (!json_mode) mySerCmd.Print((char *) "ERROR: Invalid map id!\r\n");
+    if (json_mode) json["success"] = "false";
+    if (json_mode) json["command"] = "getmap";
+    if (json_mode) json["error"] = "Invalid map id";
+    if (json_mode) { serializeJson(json, Serial); Serial.println(); }
     return;
   }
 
   // Send CTRL_OTA_START_RESP packet
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_START_RESP\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_START_RESP\r\n");
   Send_Frame(ctrl_ota_start_resp_frame, sizeof(ctrl_ota_start_resp_frame));
   Get_File_Transfer_Packet(0x10);
 
 
   // Send CTRL_OTA_FILE_INFO_RESP packet
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_INFO_RESP\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_INFO_RESP\r\n");
   Send_Frame(ctrl_ota_file_info_resp_frame, sizeof(ctrl_ota_file_info_resp_frame));
   Get_File_Transfer_Packet(0x11);
 
-  if (machine_mode) mySerCmd.Print((char *) "{\"success\":\"true\",\"command\":\"getmap\",\"compressedmapdata\":\"");
+  if (json_mode) mySerCmd.Print((char *) "{\"success\":\"true\",\"command\":\"getmap\",\"compressedmapdata\":\"");
 
   // Send CTRL_OTA_FILE_POS_RESP packet
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_POS_RESP\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_POS_RESP\r\n");
   Send_Frame(ctrl_ota_file_pos_resp_frame, sizeof(ctrl_ota_file_pos_resp_frame));
   Get_File_Transfer_Packet(0x12, &currentCRC32);
 
@@ -727,7 +727,7 @@ void Get_Map(void) {
     Get_File_Transfer_Packet(0x12, &currentCRC32, &lastCRC32, &doneFlag);
   }
 
-  if (machine_mode) mySerCmd.Print((char *) "\"}\r\n");
+  if (json_mode) mySerCmd.Print((char *) "\"}\r\n");
 
   sendOK();
 }
@@ -739,17 +739,17 @@ void Get_Status(void) {
   char hexString[3];
   const char hexChars[] = "0123456789ABCDEF";
 
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Received    ");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Received    ");
 
   for (int i = 0; i < 27; i++) {
     hexString[0] = hexChars[synchronous_frame[i] >> 4];
     hexString[1] = hexChars[synchronous_frame[i] & 0x0F];
     hexString[2] = '\0';
-    if (!machine_mode) mySerCmd.Print(hexString);
-    if (!machine_mode) mySerCmd.Print((char *) " ");
+    if (!json_mode) mySerCmd.Print(hexString);
+    if (!json_mode) mySerCmd.Print((char *) " ");
   }
 
-  if (!machine_mode) mySerCmd.Print((char *) "\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "\r\n");
 
   sendOK();
 }
@@ -761,17 +761,17 @@ void Get_Pose(void) {
   char hexString[3];
   const char hexChars[] = "0123456789ABCDEF";
 
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Received    ");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Received    ");
 
   for (int i = 0; i < 25; i++) {
     hexString[0] = hexChars[pose_frame[i] >> 4];
     hexString[1] = hexChars[pose_frame[i] & 0x0F];
     hexString[2] = '\0';
-    if (!machine_mode) mySerCmd.Print(hexString);
-    if (!machine_mode) mySerCmd.Print((char *) " ");
+    if (!json_mode) mySerCmd.Print(hexString);
+    if (!json_mode) mySerCmd.Print((char *) " ");
   }
 
-  if (!machine_mode) mySerCmd.Print((char *) "\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "\r\n");
 
   sendOK();
 }
@@ -785,12 +785,12 @@ void set_H_IDLE(void) {
   sParam = mySerCmd.ReadNext();
 
   if (head_ame_attached == false) {
-    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Dynamixel controller not attached\r\n");
+    if (!json_mode) mySerCmd.Print((char *) "ERROR: Dynamixel controller not attached\r\n");
     return;
   }
  
   if (sParam == NULL) {
-    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing idle parameter\r\n");
+    if (!json_mode) mySerCmd.Print((char *) "ERROR: Missing idle parameter\r\n");
     return;
   }
 
@@ -799,13 +799,13 @@ void set_H_IDLE(void) {
     Wire.write(I2C_COMMAND_H_IDLE);
     Wire.write(0x00);
     Wire.endTransmission();
-    if (!machine_mode) mySerCmd.Print((char *) "INFO: Head idle mode disabled\r\n");
+    if (!json_mode) mySerCmd.Print((char *) "INFO: Head idle mode disabled\r\n");
   } else {
     Wire.beginTransmission(DYN_I2C_ADDRESS);
     Wire.write(I2C_COMMAND_H_IDLE);
     Wire.write(0x01);
     Wire.endTransmission();
-    if (!machine_mode) mySerCmd.Print((char *) "INFO: Head idle mode enabled\r\n");
+    if (!json_mode) mySerCmd.Print((char *) "INFO: Head idle mode enabled\r\n");
   }
 
   sendOK();
@@ -823,12 +823,12 @@ void set_H_LOOK(void) {
   uint8_t speedParam = 0;
 
   if (head_ame_attached == false) {
-    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Dynamixel controller not attached\r\n");
+    if (!json_mode) mySerCmd.Print((char *) "ERROR: Dynamixel controller not attached\r\n");
     return;
   }
  
   if (!mySerCmd.ReadNextFloat(&turnParam) || !mySerCmd.ReadNextFloat(&vertParam) || !mySerCmd.ReadNextUInt8(&speedParam)) {
-    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (!json_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
@@ -839,7 +839,7 @@ void set_H_LOOK(void) {
 
   char buf[128] = {0};
   sprintf(buf, "INFO: Looking to position turn: %0.2f, vert: %0.2f, at speed: %d\r\n", turnParam, vertParam, speedParam);
-  if (!machine_mode) mySerCmd.Print(buf);
+  if (!json_mode) mySerCmd.Print(buf);
 
   uint16_t turnParam16 = (uint16_t)(turnParam * 10);
   uint16_t vertParam16 = (uint16_t)(vertParam * 10);
@@ -868,12 +868,12 @@ void set_H_GAZE(void) {
   float eyeTargetY = 0.0;
 
   if (head_ame_attached == false) {
-    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Audio/Mouth/Eyes controller not attached\r\n");
+    if (!json_mode) mySerCmd.Print((char *) "ERROR: Audio/Mouth/Eyes controller not attached\r\n");
     return;
   }
 
   if (!mySerCmd.ReadNextFloat(&eyeTargetX) || !mySerCmd.ReadNextFloat(&eyeTargetY)) {
-    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (!json_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
@@ -883,7 +883,7 @@ void set_H_GAZE(void) {
 
   char buf[128] = {0};
   sprintf(buf, "INFO: Setting: eyeTargetX: %0.2f, eyeTargetY: %0.2f\r\n", eyeTargetX, eyeTargetY);
-  if (!machine_mode) mySerCmd.Print(buf);
+  if (!json_mode) mySerCmd.Print(buf);
 
   // scale to fit an int8 for smaller i2c transport
   int8_t eyeTargetXInt8 = int8_t(eyeTargetX * 100.0);
@@ -904,7 +904,7 @@ void set_H_GAZE(void) {
 // -------------------------------------------------------
 // A_CAL
 void run_A_CAL(void) {
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Calibrating the gripper\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Calibrating the gripper\r\n");
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
   Wire.write(I2C_COMMAND_A_CAL);
@@ -916,7 +916,7 @@ void run_A_CAL(void) {
 
 // A_OPEN
 void set_A_OPEN(void) {
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Opening the gripper\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Opening the gripper\r\n");
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
   Wire.write(I2C_COMMAND_A_OPEN);
@@ -928,7 +928,7 @@ void set_A_OPEN(void) {
 
 // A_CLOSE
 void set_A_CLOSE(void) {
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Closing the gripper\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Closing the gripper\r\n");
 
   Wire.beginTransmission(ARM_I2C_ADDRESS);
   Wire.write(I2C_COMMAND_A_CLOSE);
@@ -945,7 +945,7 @@ void set_A_ANGLE(void) {
   uint8_t speedParam = 0;
 
   if (!mySerCmd.ReadNextUInt8(&jointParam) || !mySerCmd.ReadNextFloat(&angleParam) || !mySerCmd.ReadNextUInt8(&speedParam)) {
-    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (!json_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
@@ -959,13 +959,13 @@ void set_A_ANGLE(void) {
 
   speedParam  = constrain(speedParam, 0, 100);
 
-  if (!machine_mode) mySerCmd.Print((char *) "STATUS: Setting the angle of joint ");
-  if (!machine_mode) mySerCmd.Print((int)jointParam);
-  if (!machine_mode) mySerCmd.Print((char *) " to ");
-  if (!machine_mode) mySerCmd.Print(angleParam);
-  if (!machine_mode) mySerCmd.Print((char *) " degrees at speed ");
-  if (!machine_mode) mySerCmd.Print((int)speedParam);
-  if (!machine_mode) mySerCmd.Print((char *) "\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "STATUS: Setting the angle of joint ");
+  if (!json_mode) mySerCmd.Print((int)jointParam);
+  if (!json_mode) mySerCmd.Print((char *) " to ");
+  if (!json_mode) mySerCmd.Print(angleParam);
+  if (!json_mode) mySerCmd.Print((char *) " degrees at speed ");
+  if (!json_mode) mySerCmd.Print((int)speedParam);
+  if (!json_mode) mySerCmd.Print((char *) "\r\n");
 
   uint8_t jointParam8 = (uint8_t)(jointParam);
   uint16_t angleParam16 = (uint16_t)((angleParam + 165.0) * 10);
@@ -1000,7 +1000,7 @@ void set_A_ANGLES(void) {
       !mySerCmd.ReadNextFloat(&joint5Param) || 
       !mySerCmd.ReadNextFloat(&joint6Param) || 
       !mySerCmd.ReadNextUInt8(&speedParam)) {
-    if (!machine_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
+    if (!json_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     return;
   }
 
@@ -1012,21 +1012,21 @@ void set_A_ANGLES(void) {
   joint6Param = constrain(joint6Param, -175.0, 175);
   speedParam  = constrain(speedParam, 0, 100);
 
-  if (!machine_mode) mySerCmd.Print((char *) "STATUS: Setting the angle of the joints to (1) ");
-  if (!machine_mode) mySerCmd.Print(joint1Param);
-  if (!machine_mode) mySerCmd.Print((char *) ", (2) ");
-  if (!machine_mode) mySerCmd.Print(joint2Param);
-  if (!machine_mode) mySerCmd.Print((char *) ", (3) ");
-  if (!machine_mode) mySerCmd.Print(joint3Param);
-  if (!machine_mode) mySerCmd.Print((char *) ", (4) ");
-  if (!machine_mode) mySerCmd.Print(joint4Param);
-  if (!machine_mode) mySerCmd.Print((char *) ", (5) ");
-  if (!machine_mode) mySerCmd.Print(joint5Param);
-  if (!machine_mode) mySerCmd.Print((char *) ", (6) ");
-  if (!machine_mode) mySerCmd.Print(joint6Param);
-  if (!machine_mode) mySerCmd.Print((char *) " degrees at speed ");
-  if (!machine_mode) mySerCmd.Print((int)speedParam);
-  if (!machine_mode) mySerCmd.Print((char *) "\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "STATUS: Setting the angle of the joints to (1) ");
+  if (!json_mode) mySerCmd.Print(joint1Param);
+  if (!json_mode) mySerCmd.Print((char *) ", (2) ");
+  if (!json_mode) mySerCmd.Print(joint2Param);
+  if (!json_mode) mySerCmd.Print((char *) ", (3) ");
+  if (!json_mode) mySerCmd.Print(joint3Param);
+  if (!json_mode) mySerCmd.Print((char *) ", (4) ");
+  if (!json_mode) mySerCmd.Print(joint4Param);
+  if (!json_mode) mySerCmd.Print((char *) ", (5) ");
+  if (!json_mode) mySerCmd.Print(joint5Param);
+  if (!json_mode) mySerCmd.Print((char *) ", (6) ");
+  if (!json_mode) mySerCmd.Print(joint6Param);
+  if (!json_mode) mySerCmd.Print((char *) " degrees at speed ");
+  if (!json_mode) mySerCmd.Print((int)speedParam);
+  if (!json_mode) mySerCmd.Print((char *) "\r\n");
 
   uint16_t joint1Param16 = (uint16_t)((joint1Param + 165.0) * 10);
   uint16_t joint2Param16 = (uint16_t)((joint2Param + 165.0) * 10);
@@ -1089,10 +1089,10 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     while (incomingPacket[0] != 0x55 && incomingPacket[1] != 0xAA) {
       while (!Serial1.available()) {
         if (millis() - responseTimeout >= response_timeout_period) {
-            if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the first header byte in the response packet (0x55)\r\n");
-            if (machine_mode) json["success"] = "false";
-            if (machine_mode) json["error"] = "Timed out while waiting for the first header byte in the response packet (0x55)";
-            if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+            if (!json_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the first header byte in the response packet (0x55)\r\n");
+            if (json_mode) json["success"] = "false";
+            if (json_mode) json["error"] = "Timed out while waiting for the first header byte in the response packet (0x55)";
+            if (json_mode) { serializeJson(json, Serial); Serial.println(); }
             return;
         }
       }
@@ -1102,25 +1102,25 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
 
       if (incomingPacket[incomingPacketLen] != 0x55) {
         if (responseByteReceived) {
-          if (!machine_mode) mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0x55) ");
+          if (!json_mode) mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0x55) ");
           hexString[0] = hexChars[incomingPacket[incomingPacketLen] >> 4];
           hexString[1] = hexChars[incomingPacket[incomingPacketLen] & 0x0F];
           hexString[2] = '\0';
-          if (!machine_mode) mySerCmd.Print(hexString);
-          if (!machine_mode) mySerCmd.Print((char *) "\r\n");
-          if (machine_mode) json["success"] = "false";
-          if (machine_mode) json["error"] = "WARNING: Unexpected byte received (not 0x55)";
-          if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+          if (!json_mode) mySerCmd.Print(hexString);
+          if (!json_mode) mySerCmd.Print((char *) "\r\n");
+          if (json_mode) json["success"] = "false";
+          if (json_mode) json["error"] = "WARNING: Unexpected byte received (not 0x55)";
+          if (json_mode) { serializeJson(json, Serial); Serial.println(); }
         }
       } else {
         incomingPacketLen++;
         
         while (!Serial1.available()) {
           if (millis() - responseTimeout >= response_timeout_period) {
-            if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the second header byte in the response packet (0xAA)\r\n");
-            if (machine_mode) json["success"] = "false";
-            if (machine_mode) json["error"] = "Timed out while waiting for the second header byte in the response packet (0xAA)";
-            if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+            if (!json_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the second header byte in the response packet (0xAA)\r\n");
+            if (json_mode) json["success"] = "false";
+            if (json_mode) json["error"] = "Timed out while waiting for the second header byte in the response packet (0xAA)";
+            if (json_mode) { serializeJson(json, Serial); Serial.println(); }
             return;
           }
         }
@@ -1130,15 +1130,15 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
 
         if(incomingPacket[incomingPacketLen] != 0xAA) {
           if (responseByteReceived) {
-            if (!machine_mode) mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0xAA) ");
+            if (!json_mode) mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0xAA) ");
             hexString[0] = hexChars[incomingPacket[incomingPacketLen] >> 4];
             hexString[1] = hexChars[incomingPacket[incomingPacketLen] & 0x0F];
             hexString[2] = '\0';
-            if (!machine_mode) mySerCmd.Print(hexString);
-            if (!machine_mode) mySerCmd.Print((char *) "\r\n");
-            if (machine_mode) json["success"] = "false";
-            if (machine_mode) json["error"] = "Unexpected byte received (not 0xAA)";
-            if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+            if (!json_mode) mySerCmd.Print(hexString);
+            if (!json_mode) mySerCmd.Print((char *) "\r\n");
+            if (json_mode) json["success"] = "false";
+            if (json_mode) json["error"] = "Unexpected byte received (not 0xAA)";
+            if (json_mode) { serializeJson(json, Serial); Serial.println(); }
           }
 
           incomingPacketLen = 0;
@@ -1151,10 +1151,10 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     // Wait for and receive the CTRL_ID
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
-          if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the CTRL_ID in the response packet\r\n");
-          if (machine_mode) json["success"] = "false";
-          if (machine_mode) json["error"] = "Timed out while waiting for the CTRL_ID in the response packet";
-          if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+          if (!json_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the CTRL_ID in the response packet\r\n");
+          if (json_mode) json["success"] = "false";
+          if (json_mode) json["error"] = "Timed out while waiting for the CTRL_ID in the response packet";
+          if (json_mode) { serializeJson(json, Serial); Serial.println(); }
           return;
       }
     }
@@ -1166,10 +1166,10 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     // Wait for and receive the LEN_HI
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
-          if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the LEN_HI in the response packet\r\n");
-          if (machine_mode) json["success"] = "false";
-          if (machine_mode) json["error"] = "Timed out while waiting for the LEN_HI in the response packet";
-          if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+          if (!json_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the LEN_HI in the response packet\r\n");
+          if (json_mode) json["success"] = "false";
+          if (json_mode) json["error"] = "Timed out while waiting for the LEN_HI in the response packet";
+          if (json_mode) { serializeJson(json, Serial); Serial.println(); }
           return;
       }
     }
@@ -1182,10 +1182,10 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     // Wait for and receive the LEN_LOW
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
-          if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the LEN_LOW in the response packet\r\n");
-          if (machine_mode) json["success"] = "false";
-          if (machine_mode) json["error"] = "Timed out while waiting for the LEN_LOW in the response packet";
-          if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+          if (!json_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the LEN_LOW in the response packet\r\n");
+          if (json_mode) json["success"] = "false";
+          if (json_mode) json["error"] = "Timed out while waiting for the LEN_LOW in the response packet";
+          if (json_mode) { serializeJson(json, Serial); Serial.println(); }
           return;
       }
     }
@@ -1200,10 +1200,10 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     // Wait for and receive the PACKET_ID
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
-          if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the PACKET_ID in the response packet\r\n");
-          if (machine_mode) json["success"] = "false";
-          if (machine_mode) json["error"] = "Timed out while waiting for the PACKET_ID in the response packet";
-          if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+          if (!json_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the PACKET_ID in the response packet\r\n");
+          if (json_mode) json["success"] = "false";
+          if (json_mode) json["error"] = "Timed out while waiting for the PACKET_ID in the response packet";
+          if (json_mode) { serializeJson(json, Serial); Serial.println(); }
           return;
       }
     }
@@ -1217,10 +1217,10 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     for (int i = 0; i < (lenByte + 1); i++) {
       while(!Serial1.available()) {
         if(millis() - responseTimeout >= response_timeout_period) {
-            if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the DATA or CRC in the response packet\r\n");
-            if (machine_mode) json["success"] = "false";
-            if (machine_mode) json["error"] = "Timed out while waiting for the DATA or CRC in the response packet";
-            if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+            if (!json_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the DATA or CRC in the response packet\r\n");
+            if (json_mode) json["success"] = "false";
+            if (json_mode) json["error"] = "Timed out while waiting for the DATA or CRC in the response packet";
+            if (json_mode) { serializeJson(json, Serial); Serial.println(); }
             return;
         }
       }
@@ -1235,17 +1235,17 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     }
 
     if (lenByte > (incomingPacketBuffSize - 7)) {
-      if (!machine_mode) mySerCmd.Print((char *) "WARNING: Packet length is too long for the incomingPacket buffer. Throwing out ");
-      if (!machine_mode) mySerCmd.Print(lenByte + 7);
-      if (!machine_mode) mySerCmd.Print((char *) " bytes from PACKET_ID 0x");
+      if (!json_mode) mySerCmd.Print((char *) "WARNING: Packet length is too long for the incomingPacket buffer. Throwing out ");
+      if (!json_mode) mySerCmd.Print(lenByte + 7);
+      if (!json_mode) mySerCmd.Print((char *) " bytes from PACKET_ID 0x");
       hexString[0] = hexChars[packetID >> 4];
       hexString[1] = hexChars[packetID & 0x0F];
       hexString[2] = '\0';
-      if (!machine_mode) mySerCmd.Print(hexString);
-      if (!machine_mode) mySerCmd.Print((char *) "\r\n");
-      if (machine_mode) json["success"] = "false";
-      if (machine_mode) json["error"] = "Packet length is too long for the incomingPacket buffer. Throwing out data.";
-      if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+      if (!json_mode) mySerCmd.Print(hexString);
+      if (!json_mode) mySerCmd.Print((char *) "\r\n");
+      if (json_mode) json["success"] = "false";
+      if (json_mode) json["error"] = "Packet length is too long for the incomingPacket buffer. Throwing out data.";
+      if (json_mode) { serializeJson(json, Serial); Serial.println(); }
       return;
     }
 
@@ -1276,7 +1276,7 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     }
   }
 
-  if (!machine_mode) mySerCmd.Print((char *) "INFO: Received    ");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Received    ");
   for (int i = 0; i < incomingPacketLen; i++) {
     if (response_frame != nullptr) {
       if (i < sizeOfResponseFrame) {
@@ -1286,20 +1286,20 @@ void Get_Packet(byte response_packetid, byte response_frame[], int sizeOfRespons
     hexString[0] = hexChars[incomingPacket[i] >> 4];
     hexString[1] = hexChars[incomingPacket[i] & 0x0F];
     hexString[2] = '\0';
-    if (!machine_mode) mySerCmd.Print(hexString);
-    if (!machine_mode) mySerCmd.Print((char *) " ");
+    if (!json_mode) mySerCmd.Print(hexString);
+    if (!json_mode) mySerCmd.Print((char *) " ");
   }
-  if (!machine_mode) mySerCmd.Print((char *) " (");
-  if (!machine_mode) mySerCmd.Print(incomingPacketLen);
-  if (!machine_mode) mySerCmd.Print((char *) ")\r\n");
-  if (machine_mode) { Generate_Machine_Mode_Json(incomingPacket, incomingPacketLen); }
+  if (!json_mode) mySerCmd.Print((char *) " (");
+  if (!json_mode) mySerCmd.Print(incomingPacketLen);
+  if (!json_mode) mySerCmd.Print((char *) ")\r\n");
+  if (json_mode) { Generate_json_mode_Json(incomingPacket, incomingPacketLen); }
 
   if (response_frame != nullptr) {
     if (incomingPacketLen != sizeOfResponseFrame) {
-      if (!machine_mode) mySerCmd.Print((char *) "WARNING: Length of the frame received does not match the length that was specified\r\n");
-      if (machine_mode) json["success"] = "false";
-      if (machine_mode) json["error"] = "Length of the frame received does not match the length that was specified";
-      if (machine_mode) { serializeJson(json, Serial); Serial.println(); }
+      if (!json_mode) mySerCmd.Print((char *) "WARNING: Length of the frame received does not match the length that was specified\r\n");
+      if (json_mode) json["success"] = "false";
+      if (json_mode) json["error"] = "Length of the frame received does not match the length that was specified";
+      if (json_mode) { serializeJson(json, Serial); Serial.println(); }
     }
   }
 }
@@ -1334,7 +1334,7 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
     while (incomingPacket[0] != 0x55 && incomingPacket[1] != 0xAA) {
       while (!Serial1.available()) {
         if (millis() - responseTimeout >= response_timeout_period) {
-            if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the first header byte in the response packet (0x55)\r\n");
+            if (!json_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the first header byte in the response packet (0x55)\r\n");
             return;
         }
       }
@@ -1344,19 +1344,19 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
 
       if (incomingPacket[incomingPacketLen] != 0x55) {
         if (requestByteReceived) {
-          if (!machine_mode) mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0x55) ");
+          if (!json_mode) mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0x55) ");
           hexString[0] = hexChars[incomingPacket[incomingPacketLen] >> 4];
           hexString[1] = hexChars[incomingPacket[incomingPacketLen] & 0x0F];
           hexString[2] = '\0';
-          if (!machine_mode) mySerCmd.Print(hexString);
-          if (!machine_mode) mySerCmd.Print((char *) "\r\n");
+          if (!json_mode) mySerCmd.Print(hexString);
+          if (!json_mode) mySerCmd.Print((char *) "\r\n");
         }
       } else {
         incomingPacketLen++;
         
         while (!Serial1.available()) {
           if (millis() - responseTimeout >= response_timeout_period) {
-            if (!machine_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the second header byte in the response packet (0xAA)\r\n");
+            if (!json_mode) mySerCmd.Print((char *) "WARNING: Timed out while waiting for the second header byte in the response packet (0xAA)\r\n");
             return;
           }
         }
@@ -1366,12 +1366,12 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
 
         if(incomingPacket[incomingPacketLen] != 0xAA) {
           if (requestByteReceived) {
-            if (!machine_mode) mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0xAA) ");
+            if (!json_mode) mySerCmd.Print((char *) "WARNING: Unexpected byte received (not 0xAA) ");
             hexString[0] = hexChars[incomingPacket[incomingPacketLen] >> 4];
             hexString[1] = hexChars[incomingPacket[incomingPacketLen] & 0x0F];
             hexString[2] = '\0';
-            if (!machine_mode) mySerCmd.Print(hexString);
-            if (!machine_mode) mySerCmd.Print((char *) "\r\n");
+            if (!json_mode) mySerCmd.Print(hexString);
+            if (!json_mode) mySerCmd.Print((char *) "\r\n");
           }
 
           incomingPacketLen = 0;
@@ -1384,7 +1384,7 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
     // Wait for and receive the CTRL_ID
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
-          if (!machine_mode) mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the CTRL_ID in the response packet\r\n");
+          if (!json_mode) mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the CTRL_ID in the response packet\r\n");
           return;
       }
     }
@@ -1397,7 +1397,7 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
     // Wait for and receive the LEN_HI
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
-          if (!machine_mode) mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the LEN_HI in the response packet\r\n");
+          if (!json_mode) mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the LEN_HI in the response packet\r\n");
           return;
       }
     }
@@ -1410,7 +1410,7 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
     // Wait for and receive the LEN_LOW
     while(!Serial1.available()) {
       if(millis() - responseTimeout >= response_timeout_period) {
-          if (!machine_mode) mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the LEN_LOW in the response packet\r\n");
+          if (!json_mode) mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the LEN_LOW in the response packet\r\n");
           return;
       }
     }
@@ -1425,14 +1425,14 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
     // File end packet
     if (ctrlID == 0x13) {
       *doneFlag = 1;
-      if (!machine_mode) mySerCmd.Print((char *) "\r\n");
+      if (!json_mode) mySerCmd.Print((char *) "\r\n");
     }
 
     // Wait for and receive the remaining packet data
     for (int i = 0; i < (lenByte + 2); i++) {
       while(!Serial1.available()) {
         if(millis() - responseTimeout >= response_timeout_period) {
-            if (!machine_mode) mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the DATA or CRC in the response packet\r\n");
+            if (!json_mode) mySerCmd.Print((char *) "WARNING: Sending frame timed out while waiting for the DATA or CRC in the response packet\r\n");
             return;
         }
       }
@@ -1447,14 +1447,14 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
     }
 
     if (lenByte > (incomingPacketBuffSize - 5 - 2)) {
-      if (!machine_mode) mySerCmd.Print((char *) "WARNING: Packet length is too long for the incomingPacket buffer. Throwing out ");
-      if (!machine_mode) mySerCmd.Print(lenByte + 7);
-      if (!machine_mode) mySerCmd.Print((char *) " bytes from CTRL_ID 0x");
+      if (!json_mode) mySerCmd.Print((char *) "WARNING: Packet length is too long for the incomingPacket buffer. Throwing out ");
+      if (!json_mode) mySerCmd.Print(lenByte + 7);
+      if (!json_mode) mySerCmd.Print((char *) " bytes from CTRL_ID 0x");
       hexString[0] = hexChars[ctrlID >> 4];
       hexString[1] = hexChars[ctrlID & 0x0F];
       hexString[2] = '\0';
-      if (!machine_mode) mySerCmd.Print(hexString);
-      if (!machine_mode) mySerCmd.Print((char *) "\r\n");
+      if (!json_mode) mySerCmd.Print(hexString);
+      if (!json_mode) mySerCmd.Print((char *) "\r\n");
       return;
     }
 
@@ -1468,27 +1468,27 @@ void Get_File_Transfer_Packet(byte request_ctrlid, uint32_t* currentCRC32, uint3
   }
 
   if (incomingPacket[2] != 0x12) {
-    if (!machine_mode) mySerCmd.Print((char *) "INFO: Received    ");
+    if (!json_mode) mySerCmd.Print((char *) "INFO: Received    ");
     for (int i = 0; i < incomingPacketLen; i++) {
       hexString[0] = hexChars[incomingPacket[i] >> 4];
       hexString[1] = hexChars[incomingPacket[i] & 0x0F];
       hexString[2] = '\0';
-      if (!machine_mode) mySerCmd.Print(hexString);
-      if (!machine_mode) mySerCmd.Print((char *) " ");
+      if (!json_mode) mySerCmd.Print(hexString);
+      if (!json_mode) mySerCmd.Print((char *) " ");
     }
-    if (!machine_mode) mySerCmd.Print((char *) " (");
-    if (!machine_mode) mySerCmd.Print(incomingPacketLen);
-    if (!machine_mode) mySerCmd.Print((char *) ")\r\n");
+    if (!json_mode) mySerCmd.Print((char *) " (");
+    if (!json_mode) mySerCmd.Print(incomingPacketLen);
+    if (!json_mode) mySerCmd.Print((char *) ")\r\n");
   } else {
-    //if (!machine_mode) mySerCmd.Print((char *) "INFO: FP Received ");
+    //if (!json_mode) mySerCmd.Print((char *) "INFO: FP Received ");
     for (int i = 7; i < incomingPacketLen - 2; i++) {
       hexString[0] = hexChars[incomingPacket[i] >> 4];
       hexString[1] = hexChars[incomingPacket[i] & 0x0F];
       hexString[2] = '\0';
-      //if (!machine_mode) mySerCmd.Print(hexString);
+      //if (!json_mode) mySerCmd.Print(hexString);
       mySerCmd.Print(hexString);
-      //if (machine_mode) Serial.print(hexString);
-      //if (!machine_mode) mySerCmd.Print((char *) " ");
+      //if (json_mode) Serial.print(hexString);
+      //if (!json_mode) mySerCmd.Print((char *) " ");
     }
   }
 
@@ -1518,15 +1518,15 @@ void Send_Frame(byte frame[], int sizeOfFrame) {
   frame[sizeOfFrame - 1] = crcHex[0];
 
   if (frame[2] != 0x32) {
-    if (!machine_mode) mySerCmd.Print((char *) "INFO: Transmitted ");
+    if (!json_mode) mySerCmd.Print((char *) "INFO: Transmitted ");
     for(int i = 0; i < sizeOfFrame; i++) {
       hexString[0] = hexChars[frame[i] >> 4];
       hexString[1] = hexChars[frame[i] & 0x0F];
       hexString[2] = '\0';
-      if (!machine_mode) mySerCmd.Print(hexString);
-      if (!machine_mode) mySerCmd.Print((char *) " ");
+      if (!json_mode) mySerCmd.Print(hexString);
+      if (!json_mode) mySerCmd.Print((char *) " ");
     }
-    if (!machine_mode) mySerCmd.Print((char *) "\r\n");
+    if (!json_mode) mySerCmd.Print((char *) "\r\n");
   }
 
   Serial1.write(frame, sizeOfFrame);
@@ -1539,7 +1539,7 @@ void Send_Frame_Get_Response(byte frame[], int sizeOfFrame, byte response_frame[
 }
 
 
-void Generate_Machine_Mode_Json(byte response_frame[], int sizeOfResponseFrame) {
+void Generate_json_mode_Json(byte response_frame[], int sizeOfResponseFrame) {
   JsonDocument json;
 
   uint8_t packet_id;
