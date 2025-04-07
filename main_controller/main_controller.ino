@@ -85,7 +85,7 @@ void setup() {
   // Command Setup
   mySerCmd.AddCmd("PING", SERIALCMD_FROMALL, Send_Ping);
   mySerCmd.AddCmd("VERSION", SERIALCMD_FROMALL, Get_Version);
-  mySerCmd.AddCmd("MACHINE", SERIALCMD_FROMALL, Set_Machine);
+  mySerCmd.AddCmd("JSON", SERIALCMD_FROMALL, Set_Json);
   mySerCmd.AddCmd("TOFS", SERIALCMD_FROMALL, Set_Tofs);
   mySerCmd.AddCmd("INIT", SERIALCMD_FROMALL, Send_Handshake);
   mySerCmd.AddCmd("MODE", SERIALCMD_FROMALL, Send_Mode);
@@ -331,18 +331,18 @@ void Get_Version(void) {
 }
 
 
-// Set machine mode disabled/enabled command. In machine mode, responses are sent in JSON format
+// Set json mode disabled/enabled command. In json mode, responses are sent in JSON format
 // Parameters
-// int: active (0 = disable machine mode, 1 = enable machine mode)
-// Example - "MACHINE,1"
-void Set_Machine(void) {
+// int: active (0 = disable json mode, 1 = enable json mode)
+// Example - "JSON,1"
+void Set_Json(void) {
   JsonDocument json;
   uint8_t enableParam = 0;
   
   if (!mySerCmd.ReadNextUInt8(&enableParam)) {
     if (!json_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     if (json_mode) json["success"] = "false";
-    if (json_mode) json["command"] = "machine";
+    if (json_mode) json["command"] = "json";
     if (json_mode) json["error"] = "Missing parameter";
     if (json_mode) { serializeJson(json, Serial); Serial.println(); }
     return;
@@ -350,11 +350,11 @@ void Set_Machine(void) {
 
   if (enableParam == 0) {
     json_mode = false;
-    if (!json_mode) mySerCmd.Print((char *) "INFO: Machine mode disabled\r\n");
+    if (!json_mode) mySerCmd.Print((char *) "INFO: Json mode disabled\r\n");
   } else {
     json_mode = true;
     if (json_mode) json["success"] = "true";
-    if (json_mode) json["command"] = "machine";
+    if (json_mode) json["command"] = "json";
     if (json_mode) json["value"] = "1";
   }
 
