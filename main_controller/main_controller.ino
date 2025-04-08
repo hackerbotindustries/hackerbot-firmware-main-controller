@@ -621,14 +621,14 @@ void Send_Drive(void) {
   if (!mySerCmd.ReadNextFloat(&linearParam) || !mySerCmd.ReadNextFloat(&angularParam)) {
     if (!json_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     if (json_mode) json["success"] = "false";
-    if (json_mode) json["command"] = "motor";
+    if (json_mode) json["command"] = "drive";
     if (json_mode) json["error"] = "Missing parameter";
     if (json_mode) { serializeJson(json, Serial); Serial.println(); }
     return;
   }
 
   if (json_mode) json["success"] = "true";
-  if (json_mode) json["command"] = "motor";
+  if (json_mode) json["command"] = "drive";
 
   // Constrain values to acceptable range and set the value into the frame
   linearParam = constrain(linearParam, -100.0, 100.0);
@@ -674,7 +674,7 @@ void Get_Mapdata(void) {
   if (!mySerCmd.ReadNextUInt8(&mapIdParam)) {
     if (!json_mode) mySerCmd.Print((char *) "ERROR: Missing parameter\r\n");
     if (json_mode) json["success"] = "false";
-    if (json_mode) json["command"] = "getmap";
+    if (json_mode) json["command"] = "mapdata";
     if (json_mode) json["error"] = "Missing parameter";
     if (json_mode) { serializeJson(json, Serial); Serial.println(); }
     return;
@@ -690,7 +690,7 @@ void Get_Mapdata(void) {
   if (getMapFrameResponse[7] == 0xFF && getMapFrameResponse[8] == 0xFF && getMapFrameResponse[9] == 0xFF && getMapFrameResponse[10] == 0xFF) {
     if (!json_mode) mySerCmd.Print((char *) "ERROR: Invalid map id!\r\n");
     if (json_mode) json["success"] = "false";
-    if (json_mode) json["command"] = "getmap";
+    if (json_mode) json["command"] = "mapdata";
     if (json_mode) json["error"] = "Invalid map id";
     if (json_mode) { serializeJson(json, Serial); Serial.println(); }
     return;
@@ -707,7 +707,7 @@ void Get_Mapdata(void) {
   Send_Frame(ctrl_ota_file_info_resp_frame, sizeof(ctrl_ota_file_info_resp_frame));
   Get_File_Transfer_Packet(0x11);
 
-  if (json_mode) mySerCmd.Print((char *) "{\"success\":\"true\",\"command\":\"getmap\",\"compressedmapdata\":\"");
+  if (json_mode) mySerCmd.Print((char *) "{\"success\":\"true\",\"command\":\"mapdata\",\"compressedmapdata\":\"");
 
   // Send CTRL_OTA_FILE_POS_RESP packet
   if (!json_mode) mySerCmd.Print((char *) "INFO: Sending CTRL_OTA_FILE_POS_RESP\r\n");
@@ -1557,7 +1557,7 @@ void Generate_json_mode_Json(byte response_frame[], int sizeOfResponseFrame) {
   switch (packet_id) {
     case 0x20: {
       json["success"] = "true";
-      json["command"] = "getml";
+      json["command"] = "maplist";
       json["map_num"] = response_frame[7];
 
       JsonArray map_ids = json["map_ids"].to<JsonArray>();
