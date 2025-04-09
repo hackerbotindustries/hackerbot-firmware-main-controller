@@ -736,8 +736,10 @@ void Get_Mapdata(void) {
 // Get the latest saved synchonous packet
 // Example - "B_STATUS"
 void Get_Status(void) {
+  JsonDocument json;
   char hexString[3];
   const char hexChars[] = "0123456789ABCDEF";
+  char buffer[64];  // Temporary buffer for formatted messages
 
   if (!json_mode) mySerCmd.Print((char *) "INFO: Received    ");
 
@@ -751,8 +753,66 @@ void Get_Status(void) {
 
   if (!json_mode) mySerCmd.Print((char *) "\r\n");
 
+  // Offset to skip protocol header (assumed to be 4 bytes)
+  int offset = 4;
+
+  // Extract all fields from synchronous_frame
+  uint16_t timestamp        = (uint16_t)(synchronous_frame[offset + 0] | (synchronous_frame[offset + 1] << 8));
+  uint16_t left_encoder     = (uint16_t)(synchronous_frame[offset + 2] | (synchronous_frame[offset + 3] << 8));
+  uint16_t right_encoder    = (uint16_t)(synchronous_frame[offset + 4] | (synchronous_frame[offset + 5] << 8));
+  int16_t left_speed        = (int16_t)(synchronous_frame[offset + 6] | (synchronous_frame[offset + 7] << 8));
+  int16_t right_speed       = (int16_t)(synchronous_frame[offset + 8] | (synchronous_frame[offset + 9] << 8));
+  int16_t left_set_speed    = (int16_t)(synchronous_frame[offset + 10] | (synchronous_frame[offset + 11] << 8));
+  int16_t right_set_speed   = (int16_t)(synchronous_frame[offset + 12] | (synchronous_frame[offset + 13] << 8));
+  uint16_t wall_tof         = (uint16_t)(synchronous_frame[offset + 14] | (synchronous_frame[offset + 15] << 8));
+  uint16_t bit_flags        = (uint16_t)(synchronous_frame[offset + 16] | (synchronous_frame[offset + 17] << 8));
+
+  // JSON output
+  if (json_mode) {
+    json["success"] = "true";
+    json["command"] = "status";
+
+    json["timestamp"] = timestamp;
+    json["left_encoder"] = left_encoder;
+    json["right_encoder"] = right_encoder;
+    json["left_speed"] = left_speed;
+    json["right_speed"] = right_speed;
+    json["left_set_speed"] = left_set_speed;
+    json["right_set_speed"] = right_set_speed;
+    json["wall_tof"] = wall_tof;
+
+    serializeJson(json, Serial);
+    Serial.println();
+  }
+
+  // Console print (non-JSON mode)
+  if (!json_mode) {
+    sprintf(buffer, "INFO: Timestamp       = %u\r\n", timestamp);
+    mySerCmd.Print(buffer);
+    sprintf(buffer, "INFO: Left Encoder    = %u, Right Encoder = %u\r\n", left_encoder, right_encoder);
+    mySerCmd.Print(buffer);
+    sprintf(buffer, "INFO: Left Speed      = %d, Right Speed   = %d\r\n", left_speed, right_speed);
+    mySerCmd.Print(buffer);
+    sprintf(buffer, "INFO: Left Set Speed  = %d, Right Set Speed = %d\r\n", left_set_speed, right_set_speed);
+    mySerCmd.Print(buffer);
+    sprintf(buffer, "INFO: Wall TOF        = %u\r\n", wall_tof);
+    mySerCmd.Print(buffer);
+    sprintf(buffer, "INFO: Bit Flags (Raw) = 0x%04X\r\n", bit_flags);
+    mySerCmd.Print(buffer);
+  }
+
+  // Check if action is considered "done"
+  bool action_done = (left_speed == 0 && right_speed == 0 &&
+                      left_set_speed == 0 && right_set_speed == 0);
+
+  if (!json_mode) {
+    mySerCmd.Print((char *)"INFO: Action Status -> ");
+    mySerCmd.Print((char *)(action_done ? "DONE\r\n" : "IN PROGRESS\r\n"));
+  }
+
   sendOK();
 }
+
 
 
 // Get the latest saved pose packet
