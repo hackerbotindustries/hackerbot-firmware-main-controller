@@ -820,21 +820,54 @@ void Get_Status(void) {
 void Get_Pose(void) {
   char hexString[3];
   const char hexChars[] = "0123456789ABCDEF";
+  JsonDocument json;
 
-  if (!json_mode) mySerCmd.Print((char *) "INFO: Received    ");
-
+  // Print raw hex log if not in JSON mode
+  if (!json_mode) mySerCmd.Print((char*)"INFO: Received    ");
   for (int i = 0; i < 25; i++) {
     hexString[0] = hexChars[pose_frame[i] >> 4];
     hexString[1] = hexChars[pose_frame[i] & 0x0F];
     hexString[2] = '\0';
     if (!json_mode) mySerCmd.Print(hexString);
-    if (!json_mode) mySerCmd.Print((char *) " ");
+    if (!json_mode) mySerCmd.Print((char*)" ");
+  }
+  if (!json_mode) mySerCmd.Print((char*)"\r\n");
+
+  // === Parse values from pose_frame buffer ===
+  int32_t map_id = *(int32_t*)(pose_frame + 7);
+  float pose_x   = *(float*)(pose_frame + 11);
+  float pose_y   = *(float*)(pose_frame + 15);
+  float pose_angle = *(float*)(pose_frame + 19);
+
+  pose_angle = pose_angle * (180.0 / 3.1416);
+
+  // === Output either plain text or JSON ===
+  if (!json_mode) {
+    mySerCmd.Print((char*)"map_id: ");
+    mySerCmd.Print(map_id);
+    mySerCmd.Print((char*)", pose_x: ");
+    mySerCmd.Print(pose_x, 6);
+    mySerCmd.Print((char*)", pose_y: ");
+    mySerCmd.Print(pose_y, 6);
+    mySerCmd.Print((char*)", pose_angle: ");
+    mySerCmd.Print(pose_angle, 6);
+    mySerCmd.Print((char*)"\r\n");
   }
 
-  if (!json_mode) mySerCmd.Print((char *) "\r\n");
+  if (json_mode) {
+    json["success"] = "true";
+    json["command"] = "pose";
+    json["map_id"] = map_id;
+    json["pose_x"] = pose_x;
+    json["pose_y"] = pose_y;
+    json["pose_angle"] = pose_angle;
+    serializeJson(json, Serial);
+    Serial.println();
+  }
 
   sendOK();
 }
+
 
 
 // -------------------------------------------------------
