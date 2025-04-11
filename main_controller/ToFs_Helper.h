@@ -26,7 +26,7 @@ extern "C" {
 #define TOF_LEFT_I2C_ADDRESS      0x2A     // Time of flight sensor (left) configured address
 #define TOF_RIGHT_I2C_ADDRESS     0x2B     // Time of flight sensor (right) configured address
 
-extern bool machine_mode;
+extern bool json_mode;
 
 enum tof_state_t {
   TOF_STATE_NOTCONNECTED = 0,
