@@ -101,6 +101,22 @@ void setup() {
   mySerCmd.AddCmd("B_STATUS", SERIALCMD_FROMALL, Get_Status);
   mySerCmd.AddCmd("B_POSE", SERIALCMD_FROMALL, Get_Pose);
 
+  // Old base commands
+  mySerCmd.AddCmd("MACHINE", SERIALCMD_FROMALL, Set_Json);
+  mySerCmd.AddCmd("INIT", SERIALCMD_FROMALL, Send_Handshake);
+  mySerCmd.AddCmd("MODE", SERIALCMD_FROMALL, Send_Mode);
+  mySerCmd.AddCmd("ENTER", SERIALCMD_FROMALL, Send_Start);
+  mySerCmd.AddCmd("QUICKMAP", SERIALCMD_FROMALL, Send_QuickMap);
+  mySerCmd.AddCmd("GOTO", SERIALCMD_FROMALL, Send_Goto);
+  mySerCmd.AddCmd("DOCK", SERIALCMD_FROMALL, Send_Dock);
+  mySerCmd.AddCmd("STOP", SERIALCMD_FROMALL, Send_Kill);
+  mySerCmd.AddCmd("BUMP", SERIALCMD_FROMALL, Send_Bump);
+  mySerCmd.AddCmd("MOTOR", SERIALCMD_FROMALL, Send_Drive);  
+  mySerCmd.AddCmd("GETML", SERIALCMD_FROMALL, Get_Maplist);
+  mySerCmd.AddCmd("GETMAP", SERIALCMD_FROMALL, Get_Mapdata);
+  mySerCmd.AddCmd("STATUS", SERIALCMD_FROMALL, Get_Status);
+  mySerCmd.AddCmd("POSE", SERIALCMD_FROMALL, Get_Pose);
+
   // Head Commands
   mySerCmd.AddCmd("H_IDLE", SERIALCMD_FROMALL, set_H_IDLE);
   mySerCmd.AddCmd("H_LOOK", SERIALCMD_FROMALL, set_H_LOOK);
