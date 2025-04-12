@@ -649,7 +649,7 @@ void Send_Drive(void) {
 
   // Constrain values to acceptable range and set the value into the frame
   linearParam = constrain(linearParam, -100.0, 100.0);
-  angularParam = constrain(angularParam, -100.0, 100.0);
+  angularParam = constrain(angularParam, -120.0, 120.0);
 
   // Convert degrees/s to mrad/s
   angularParam = angularParam * ((1000 * 3.1416) / 180);
