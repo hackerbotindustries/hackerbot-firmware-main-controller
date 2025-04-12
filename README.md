@@ -9,12 +9,12 @@ This document outlines the serial commands used to interface with the **Main Con
 Commands are sent as ASCII strings over a serial interface. Each command follows a structure:
 
 ```
-<Component>_<COMMAND> <PARAMETERS>
+<COMMAND> <PARAMETERS>
 ```
 
 For example:
 ```
-B_GOTO 1.0,2.0,90.0,1
+B_GOTO, 1.0, 2.0, 90.0, 0.1
 ```
 
 ---
@@ -70,14 +70,14 @@ B_GOTO 1.0,2.0,90.0,1
 ## 📃 Example Commands
 
 ```bash
-# Start the base at position x=1.0, y=2.0, angle=90 degrees, rotation=1
-B_START 1.0,2.0,90.0,1
+# Start the base to enter dedicated mode
+B_START
 
 # Move head to yaw=30.0, pitch=10.0 at speed 5
 H_LOOK 30.0,10.0,5
 
-# Gaze at a point x=1.5, y=0.8
-H_GAZE 1.5,0.8
+# Gaze at a point x=1.0, y=0.8
+H_GAZE 1.0,0.8
 
 # Move arm joint 3 to 45 degrees at speed 10
 A_ANGLE 3,45.0,10
