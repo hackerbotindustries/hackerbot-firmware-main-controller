@@ -15,6 +15,7 @@ Special thanks to the following for their code contributions to this codebase:
 Ian Bernstein - https://github.com/arobodude
 Skylar Castator - https://github.com/SkylarCastator
 Randy Beiter - https://github.com/rbeiter
+Allen Chien - https://github.com/AllenChienXXX
 *********************************************************************************/
 
 
@@ -925,7 +926,7 @@ void set_H_IDLE(void) {
 // Parameters
 // float: yaw (rotation angle between 100.0 and 260.0 degrees - 180.0 is looking straight ahead)
 // float: pitch (vertical angle between 150.0 and 250.0 degrees - 180.0 is looking straight ahead)
-// Example - "LOOK,180.0,180.0"
+// Example - "H_LOOK, 180.0, 180.0, 20"
 void set_H_LOOK(void) {
   float turnParam = 0.0;
   float vertParam = 0.0;
@@ -946,9 +947,18 @@ void set_H_LOOK(void) {
   vertParam = constrain(vertParam, 150.0, 250.0);
   speedParam = constrain(speedParam, 6, 70);
 
-  char buf[128] = {0};
-  sprintf(buf, "INFO: Looking to position turn: %0.2f, vert: %0.2f, at speed: %d\r\n", turnParam, vertParam, speedParam);
-  if (!json_mode) mySerCmd.Print(buf);
+  // char buf[128] = {0};
+  // sprintf(buf, "INFO: Looking to position turn: %0.2f, vert: %0.2f, at speed: %d\r\n", turnParam, vertParam, speedParam);
+  // if (!json_mode) mySerCmd.Print(buf);
+  if (!json_mode){
+    mySerCmd.Print((char*)"INFO: Looking to position turn: ");
+    mySerCmd.Print(turnParam, 2);  // Assuming this works like Serial.print(float, digits)
+    mySerCmd.Print((char*)", vert: ");
+    mySerCmd.Print(vertParam, 2);
+    mySerCmd.Print((char*)", at speed: ");
+    mySerCmd.Print(speedParam);   // This can be uint8_t or int
+    mySerCmd.Print((char*)"\r\n");
+  }
 
   uint16_t turnParam16 = (uint16_t)(turnParam * 10);
   uint16_t vertParam16 = (uint16_t)(vertParam * 10);
