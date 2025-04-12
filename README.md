@@ -9,12 +9,12 @@ This document outlines the serial commands used to interface with the **Main Con
 Commands are sent as ASCII strings over a serial interface. Each command follows a structure:
 
 ```
-<Component>_<COMMAND> <PARAMETERS>
+<COMMAND> <PARAMETERS>
 ```
 
 For example:
 ```
-B_GOTO 1.0,2.0,90.0,0.1
+B_GOTO, 1.0, 2.0, 90.0, 0.1
 ```
 
 ---
