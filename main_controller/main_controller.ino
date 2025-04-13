@@ -2,7 +2,7 @@
 Hackerbot Industries, LLC
 Created By: Ian Bernstein
 Created:    April 2024
-Updated:    April 1, 2025
+Updated:    April 12, 2025
 
 This sketch is written for the "Main Controller" PCBA. It serves several funtions:
   1) Communicate with the SLAM Base Robot
@@ -201,12 +201,13 @@ void loop() {
   }
 
   // Check for data coming from the SLAM base robot
-  if (Serial1.available()) {
-  //unsigned int bytesInBuffer = Serial1.available();
-  //if (bytesInBuffer) {
-  //  if (!json_mode) mySerCmd.Print((char *) "DEBUG: Buffer ");
-  //  if (!json_mode) mySerCmd.Print(bytesInBuffer);
-  //  if (!json_mode) mySerCmd.Print((char *) "\r\n");
+  //if (Serial1.available()) {
+  unsigned int bytesInBuffer = Serial1.available();
+  if (bytesInBuffer) {
+    if (bytesInBuffer > 280) {
+      if (!json_mode) mySerCmd.Print((char *) "WARNING: Serial1 RX buffer (slam base) is close to or already overflowing\r\n");
+      if (json_mode) mySerCmd.Print((char *) "{\"warning\":\"Serial1 RX buffer (slam base) is close to or already overflowing\"}\r\n");
+    }
     Get_Packet();
   }
 }
@@ -520,10 +521,10 @@ void Send_Kill(void) {
 }
 
 
-// Go to pose command. Must have a map created first.
+// Go to position command. Must have a map created first.
 // Parameters
 // float: x (meters), float: y (meters), float: angle (degrees), float: speed (m/s)
-// Example - "B_GOTO,0.5,0.5,0,10"
+// Example - "B_GOTO,2.1,-0.5,90,0.2"
 void Send_Goto(void) {
   float xParam = 0.0;
   float yParam = 0.0;
@@ -823,8 +824,8 @@ void Get_Status(void) {
                       left_set_speed == 0 && right_set_speed == 0);
 
   if (!json_mode) {
-    mySerCmd.Print((char *)"INFO: Action Status -> ");
-    mySerCmd.Print((char *)(action_done ? "DONE\r\n" : "IN PROGRESS\r\n"));
+    mySerCmd.Print((char *)"INFO: Moving -> ");
+    mySerCmd.Print((char *)(action_done ? "No\r\n" : "Yes, in progress\r\n"));
   }
 
   sendOK();
@@ -832,7 +833,7 @@ void Get_Status(void) {
 
 
 
-// Get the latest saved pose packet
+// Get the latest saved position packet
 // Example - "B_POSE"
 void Get_Pose(void) {
   char hexString[3];
@@ -860,6 +861,7 @@ void Get_Pose(void) {
 
   // === Output either plain text or JSON ===
   if (!json_mode) {
+    mySerCmd.Print((char*)"INFO: ");
     mySerCmd.Print((char*)"map_id: ");
     mySerCmd.Print(map_id);
     mySerCmd.Print((char*)", pose_x: ");
@@ -926,7 +928,7 @@ void set_H_IDLE(void) {
 // Parameters
 // float: yaw (rotation angle between 100.0 and 260.0 degrees - 180.0 is looking straight ahead)
 // float: pitch (vertical angle between 150.0 and 250.0 degrees - 180.0 is looking straight ahead)
-// Example - "H_LOOK, 180.0, 180.0, 20"
+// Example - "H_LOOK,180.0,180.0,20"
 void set_H_LOOK(void) {
   float turnParam = 0.0;
   float vertParam = 0.0;
