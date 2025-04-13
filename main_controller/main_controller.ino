@@ -74,6 +74,23 @@ void setup() {
 
   Serial1.begin(230400);
 
+
+
+  // ADD CODE TO CHECK THE BUFFER SIZE HERE
+  Serial.print("SERIAL_BUFFER_SIZE defined as: ");
+  Serial.println(SERIAL_BUFFER_SIZE);
+
+  // ADD CODE TO CHECK IF THE SERIALCMD LIBRARY WAS CHECKED HERE
+  Serial.print("SERIALCMD_MAXCMDNUM defined as: ");
+  Serial.println(SERIALCMD_MAXCMDNUM);
+
+  Serial.print("SERIALCMD_MAXCMDLNG defined as: ");
+  Serial.println(SERIALCMD_MAXCMDLNG);
+
+  Serial.print("SERIALCMD_MAXBUFFER defined as: ");
+  Serial.println(SERIALCMD_MAXBUFFER);
+  // DON'T FORGET TO REMOVE THE DEBUG DELAY IN THE MAIN LOOP!!!!!!!!
+
   delay(1000);
 
   if (!json_mode) mySerCmd.Print((char *) "INFO: Initalizing application...\r\n");
@@ -171,6 +188,7 @@ void loop() {
 
       if (currentTofMillis - previousTofMillis >= 125 && read_left_tof_toggle) {
         left_tof_obj_detected = check_left_sensor();
+        delay(10);
         read_left_tof_toggle = false;
       }
 
@@ -204,8 +222,10 @@ void loop() {
   //if (Serial1.available()) {
   unsigned int bytesInBuffer = Serial1.available();
   if (bytesInBuffer) {
-    if (bytesInBuffer > 280) {
-      if (!json_mode) mySerCmd.Print((char *) "WARNING: Serial1 RX buffer (slam base) is close to or already overflowing\r\n");
+    if (bytesInBuffer > 345) {
+      //if (!json_mode) mySerCmd.Print((char *) "WARNING: Serial1 RX buffer (slam base) is close to or already overflowing (");
+      if (!json_mode) mySerCmd.Print(bytesInBuffer);
+      if (!json_mode) mySerCmd.Print((char *) "\r\n");
       if (json_mode) mySerCmd.Print((char *) "{\"warning\":\"Serial1 RX buffer (slam base) is close to or already overflowing\"}\r\n");
     }
     Get_Packet();
