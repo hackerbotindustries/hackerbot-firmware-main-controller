@@ -542,7 +542,7 @@ void Send_Dock(void) {
 void Send_Kill(void) {
   behavior_control_frame[7] = 7;
 
-  if (!json_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (STOP)\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (KILL)\r\n");
   Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
 
   Get_Packet(behavior_control_frame[5]);
@@ -801,10 +801,10 @@ void Get_Status(void) {
   if (!json_mode) mySerCmd.Print((char *) "\r\n");
 
   // Offset to skip protocol header (assumed to be 4 bytes)
-  int offset = 6;
+  int offset = 7;
 
   // Extract all fields from synchronous_frame
-  uint16_t timestamp        = (uint16_t)(synchronous_frame[offset + 0] | (synchronous_frame[offset + 1] << 8));
+  uint32_t timestamp        = (uint32_t)(synchronous_frame[offset + 0] | (synchronous_frame[offset + 1] << 8));
   uint16_t left_encoder     = (uint16_t)(synchronous_frame[offset + 2] | (synchronous_frame[offset + 3] << 8));
   uint16_t right_encoder    = (uint16_t)(synchronous_frame[offset + 4] | (synchronous_frame[offset + 5] << 8));
   int16_t left_speed        = (int16_t)(synchronous_frame[offset + 6] | (synchronous_frame[offset + 7] << 8));
@@ -812,26 +812,26 @@ void Get_Status(void) {
   int16_t left_set_speed    = (int16_t)(synchronous_frame[offset + 10] | (synchronous_frame[offset + 11] << 8));
   int16_t right_set_speed   = (int16_t)(synchronous_frame[offset + 12] | (synchronous_frame[offset + 13] << 8));
   uint16_t wall_tof         = (uint16_t)(synchronous_frame[offset + 14] | (synchronous_frame[offset + 15] << 8));
+  
   uint16_t bit_flags        = (uint16_t)(synchronous_frame[offset + 16] | (synchronous_frame[offset + 17] << 8));
 
-  uint8_t bump_left = (bit_flags >> 8) & 1;
-  uint8_t bump_right = (bit_flags >> 9) & 1;
-  uint8_t wall_left = (bit_flags >> 10) & 1;
-  uint8_t wall_mid = (bit_flags >> 11) & 1;
-  uint8_t wall_right = (bit_flags >> 12) & 1;
-  uint8_t cliff_left = (bit_flags >> 13) & 1;
+  uint8_t bump_left = (bit_flags) & 1;
+  uint8_t bump_right = (bit_flags >> 1) & 1;
 
-uint8_t unknown1 = (bit_flags >> 14) & 1;
-uint8_t unknown2 = (bit_flags >> 15) & 1;
+  uint8_t wall_left = (bit_flags >> 2) & 1;
+  uint8_t wall_mid = (bit_flags >> 3) & 1;
+  uint8_t wall_right = (bit_flags >> 4) & 1;
+  uint8_t cliff_left = (bit_flags >> 5) & 1;
 
-  uint8_t cliff_front_left = (bit_flags >> 0) & 1;
-  uint8_t cliff_front_right = (bit_flags >> 1) & 1;
-  uint8_t cliff_right = (bit_flags >> 2) & 1;
-  uint8_t lidar_bump_a = (bit_flags >> 3) & 1;
-  uint8_t lidar_bump_b = (bit_flags >> 4) & 1;
-  uint8_t dc_plug = (bit_flags >> 5) & 1;
-  uint8_t dust_box = (bit_flags >> 6) & 1;
-  uint8_t mop_l = (bit_flags >> 7) & 1;
+  uint8_t cliff_front_left = (bit_flags >> 6) & 1;
+  uint8_t cliff_front_right = (bit_flags >> 7) & 1;
+  uint8_t cliff_right = (bit_flags >> 8) & 1;
+  uint8_t lidar_bump_a = (bit_flags >> 9) & 1;
+
+  uint8_t lidar_bump_b = (bit_flags >> 10) & 1;
+  uint8_t dc_plug = (bit_flags >> 11) & 1;
+  uint8_t dust_box = (bit_flags >> 12) & 1;
+  uint8_t mop_l = (bit_flags >> 13) & 1;
 
   // Check if the robot is moving or not
   bool moving = (left_speed != 0 && right_speed != 0 &&
@@ -851,11 +851,22 @@ uint8_t unknown2 = (bit_flags >> 15) & 1;
     json["right_set_speed"] = right_set_speed;
     json["wall_tof"] = wall_tof;
 
-    if (moving) {
-      json["moving"] = "true";
-    } else {
-      json["moving"] = "false";
-    }
+    json["bump_left"] = bump_left;
+    json["bump_right"] = bump_right;
+    json["wall_left"] = wall_left;
+    json["wall_mid"] = wall_mid;
+    json["wall_right"] = wall_right;
+    json["cliff_left"] = cliff_left;
+    json["cliff_front_left"] = cliff_front_left;
+    json["cliff_front_right"] = cliff_front_right;
+    json["cliff_right"] = cliff_right;
+    json["lidar_bump_a"] = lidar_bump_a;
+    json["lidar_bump_b"] = lidar_bump_b;
+    json["dc_plug"] = dc_plug;
+    json["dust_box"] = dust_box;
+    json["mop_l"] = mop_l;
+
+    json["moving"] = moving;
 
     serializeJson(json, Serial);
     Serial.println();
@@ -878,35 +889,32 @@ uint8_t unknown2 = (bit_flags >> 15) & 1;
 
     mySerCmd.Print((char *)"INFO: Bump Left         = ");
     mySerCmd.Print((char *)(bump_left ? "True\r\n" : "False\r\n"));
-    mySerCmd.Print((char *)"INFO: bump_right        = ");
+    mySerCmd.Print((char *)"INFO: Bump Right        = ");
     mySerCmd.Print((char *)(bump_right ? "True\r\n" : "False\r\n"));
-    mySerCmd.Print((char *)"INFO: wall_left         = ");
+    mySerCmd.Print((char *)"INFO: Wall Left         = ");
     mySerCmd.Print((char *)(wall_left ? "True\r\n" : "False\r\n"));
-    mySerCmd.Print((char *)"INFO: wall_mid          = ");
+    mySerCmd.Print((char *)"INFO: Wall Mid          = ");
     mySerCmd.Print((char *)(wall_mid ? "True\r\n" : "False\r\n"));
-    mySerCmd.Print((char *)"INFO: wall_right        = ");
+    mySerCmd.Print((char *)"INFO: Wall Right        = ");
     mySerCmd.Print((char *)(wall_right ? "True\r\n" : "False\r\n"));
-    mySerCmd.Print((char *)"INFO: cliff_left        = ");
+    mySerCmd.Print((char *)"INFO: Cliff Left        = ");
     mySerCmd.Print((char *)(cliff_left ? "True\r\n" : "False\r\n"));
-    mySerCmd.Print((char *)"INFO: cliff_front_left  = ");
+    mySerCmd.Print((char *)"INFO: Cliff Front Left  = ");
     mySerCmd.Print((char *)(cliff_front_left ? "True\r\n" : "False\r\n"));
-    mySerCmd.Print((char *)"INFO: cliff_front_right = ");
+    mySerCmd.Print((char *)"INFO: Cliff Front Right = ");
     mySerCmd.Print((char *)(cliff_front_right ? "True\r\n" : "False\r\n"));
-    mySerCmd.Print((char *)"INFO: cliff_right       = ");
+    mySerCmd.Print((char *)"INFO: Cliff Right       = ");
     mySerCmd.Print((char *)(cliff_right ? "True\r\n" : "False\r\n"));
-    mySerCmd.Print((char *)"INFO: lidar_bump_a      = ");
+    mySerCmd.Print((char *)"INFO: Lidar Bump A      = ");
     mySerCmd.Print((char *)(lidar_bump_a ? "True\r\n" : "False\r\n"));
-    mySerCmd.Print((char *)"INFO: lidar_bump_b      = ");
+    mySerCmd.Print((char *)"INFO: Lidar Bump B      = ");
     mySerCmd.Print((char *)(lidar_bump_b ? "True\r\n" : "False\r\n"));
-    mySerCmd.Print((char *)"INFO: dc_plug           = ");
+    mySerCmd.Print((char *)"INFO: DC Plug           = ");
     mySerCmd.Print((char *)(dc_plug ? "True\r\n" : "False\r\n"));
-    mySerCmd.Print((char *)"INFO: mop_l             = ");
+    mySerCmd.Print((char *)"INFO: Dust Box          = ");
+    mySerCmd.Print((char *)(dust_box ? "True\r\n" : "False\r\n"));
+    mySerCmd.Print((char *)"INFO: Mop L             = ");
     mySerCmd.Print((char *)(mop_l ? "True\r\n" : "False\r\n"));
-
-    mySerCmd.Print((char *)"INFO: unknown1          = ");
-    mySerCmd.Print((char *)(unknown1 ? "True\r\n" : "False\r\n"));
-    mySerCmd.Print((char *)"INFO: unknown2          = ");
-    mySerCmd.Print((char *)(unknown2 ? "True\r\n" : "False\r\n"));
 
     mySerCmd.Print((char *)"INFO: Moving            = ");
     mySerCmd.Print((char *)(moving ? "True\r\n" : "False\r\n"));

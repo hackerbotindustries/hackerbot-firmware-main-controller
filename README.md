@@ -9,7 +9,7 @@ This document outlines the serial commands used to interface with the **Main Con
 Commands are sent as ASCII strings over a serial interface. Each command follows a structure:
 
 ```
-<COMMAND> <PARAMETERS>
+<COMMAND>,<PARAMETER_1>,<PARAMETER_2>,...,<PARAMETER_N>
 ```
 
 For example:
