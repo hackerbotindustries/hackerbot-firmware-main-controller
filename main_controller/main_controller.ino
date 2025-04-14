@@ -805,8 +805,8 @@ void Get_Status(void) {
 
   // Extract all fields from synchronous_frame
   uint32_t timestamp        = (uint32_t)(synchronous_frame[offset + 0] | (synchronous_frame[offset + 1] << 8));
-  uint16_t left_encoder     = (uint16_t)(synchronous_frame[offset + 2] | (synchronous_frame[offset + 3] << 8));
-  uint16_t right_encoder    = (uint16_t)(synchronous_frame[offset + 4] | (synchronous_frame[offset + 5] << 8));
+  int16_t left_encoder      = (int16_t)(synchronous_frame[offset + 2] | (synchronous_frame[offset + 3] << 8));
+  int16_t right_encoder     = (int16_t)(synchronous_frame[offset + 4] | (synchronous_frame[offset + 5] << 8));
   int16_t left_speed        = (int16_t)(synchronous_frame[offset + 6] | (synchronous_frame[offset + 7] << 8));
   int16_t right_speed       = (int16_t)(synchronous_frame[offset + 8] | (synchronous_frame[offset + 9] << 8));
   int16_t left_set_speed    = (int16_t)(synchronous_frame[offset + 10] | (synchronous_frame[offset + 11] << 8));
@@ -876,7 +876,7 @@ void Get_Status(void) {
   if (!json_mode) {
     sprintf(buffer, "INFO: Timestamp       = %u\r\n", timestamp);
     mySerCmd.Print(buffer);
-    sprintf(buffer, "INFO: Left Encoder    = %u, Right Encoder = %u\r\n", left_encoder, right_encoder);
+    sprintf(buffer, "INFO: Left Encoder    = %d, Right Encoder = %d\r\n", left_encoder, right_encoder);
     mySerCmd.Print(buffer);
     sprintf(buffer, "INFO: Left Speed      = %d, Right Speed   = %d\r\n", left_speed, right_speed);
     mySerCmd.Print(buffer);
