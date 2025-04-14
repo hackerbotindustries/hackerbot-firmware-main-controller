@@ -153,27 +153,15 @@ bool compare_result(VL53L7CX *sensor, long calibration_values[]) {
   uint8_t NewDataReady = 0;
   uint8_t status;
 
-  //unsigned long startMillis = millis(); // For DEBUGGING
-
   do {
     status = sensor->vl53l7cx_check_data_ready(&NewDataReady);
   } while (!NewDataReady);
-
-  //mySerCmd.Print((char *) "DEBUG: Is new data ready time: ");
-  //mySerCmd.Print(millis() - startMillis);
-  //mySerCmd.Print((char *) "\r\n");
-  //startMillis = millis(); // For DEBUGGING
 
   if ((!status) && (NewDataReady != 0)) {
     status = sensor->vl53l7cx_get_ranging_data(&Result);
   } else {
     return false;
   }
-
-  //mySerCmd.Print((char *) "DEBUG: Data ranging time: ");
-  //mySerCmd.Print(millis() - startMillis);
-  //mySerCmd.Print((char *) "\r\n");
-  //startMillis = millis(); // For DEBUGGING
 
   // Evaluate Result
   int8_t i, j, k;
@@ -196,10 +184,6 @@ bool compare_result(VL53L7CX *sensor, long calibration_values[]) {
       }
     }
   }
-
-  //mySerCmd.Print((char *) "DEBUG: Comparison time: ");
-  //mySerCmd.Print(millis() - startMillis);
-  //mySerCmd.Print((char *) "\r\n");
 
   return (object_detected == 1);
 }
