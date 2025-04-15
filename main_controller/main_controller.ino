@@ -2,7 +2,7 @@
 Hackerbot Industries, LLC
 Created By: Ian Bernstein
 Created:    April 2024
-Updated:    April 1, 2025
+Updated:    April 12, 2025
 
 This sketch is written for the "Main Controller" PCBA. It serves several funtions:
   1) Communicate with the SLAM Base Robot
@@ -62,6 +62,31 @@ void Get_Packet(byte response_packetid = 0x00, byte response_frame[] = nullptr, 
 void Get_File_Transfer_Packet(byte request_ctrlid = 0x00, uint32_t* currentCRC32 = nullptr, uint32_t* lastCRC32 = nullptr, uint8_t* doneFlag = nullptr);
 void Generate_Json_Mode(byte response_frame[] = nullptr, int sizeOfResponseFrame = 0);
 
+// Check if SerialCmd and the Adafruit SAMD21 QT Py board package are configured correctly.
+// See the documentation for details: 
+// https://hackerbot-industries.gitbook.io/documentation-hackerbot-industries/tutorials/updating-the-firmware
+#if SERIAL_BUFFER_SIZE != 1024
+    #error "ERROR: The value of SERIAL_BUFFER_SIZE must be modified to 1024 on line 32 of: (see following errors for more details)"
+    #error "Win: C:\Users\{username}\AppData\Local\Arduino15\packages\adafruit\hardware\samd\1.7.10\cores\arduino\RingBuffer.h"
+    #error "Mac: /Users/{username}/Library/Arduino15/packages/adafruit/hardware/samd/1.7.10/cores/arduino/RingBuffer.h"
+    #error "Linux: /home/{username}/.arduino15/Arduino15/packages/adafruit/hardware/samd/1.7.10/cores/arduino/RingBuffer.h"
+    #error "Please update this value and try again"
+    #error "Set to -----> #define SERIAL_BUFFER_SIZE 1024"
+    #error "https://hackerbot-industries.gitbook.io/documentation-hackerbot-industries/tutorials/updating-the-firmware"
+#endif
+
+#if SERIALCMD_MAXCMDNUM != 60 || SERIALCMD_MAXCMDLNG != 32 || SERIALCMD_MAXBUFFER != 128
+    #error "ERROR: The values of SERIALCMD_MAXCMDNUM, SERIALCMD_MAXCMDLNG, and SERIALCMD_MAXBUFFER must be modified on lines 80-82 of: (see following errors for more details)"
+    #error "Win: C:\Users\{username}\Documents\Arduino\libraries\SerialCmd\src\SerialCmd.h"
+    #error "Mac: /Users/{username}/Documents/Arduino/libraries/SerialCmd/src/SerialCmd.h"
+    #error "Linux: /home/{username}/Arduino/libraries/SerialCmd/src/SerialCmd.h"
+    #error "Please update these values to the following and try again."
+    #error "Set to -----> #define SERIALCMD_MAXCMDNUM  60"
+    #error "Set to -----> #define SERIALCMD_MAXCMDLNG  32"
+    #error "Set to -----> #define SERIALCMD_MAXBUFFER  128"
+    #error "https://hackerbot-industries.gitbook.io/documentation-hackerbot-industries/tutorials/updating-the-firmware"
+#endif
+
 
 // -------------------------------------------------------
 // setup()
@@ -73,6 +98,8 @@ void setup() {
   while(!Serial && millis() - serialTimout <= 5000);
 
   Serial1.begin(230400);
+
+  // DON'T FORGET TO REMOVE THE DEBUG DELAY IN THE MAIN LOOP!!!!!!!!
 
   delay(1000);
 
@@ -201,12 +228,15 @@ void loop() {
   }
 
   // Check for data coming from the SLAM base robot
-  if (Serial1.available()) {
-  //unsigned int bytesInBuffer = Serial1.available();
-  //if (bytesInBuffer) {
-  //  if (!json_mode) mySerCmd.Print((char *) "DEBUG: Buffer ");
-  //  if (!json_mode) mySerCmd.Print(bytesInBuffer);
-  //  if (!json_mode) mySerCmd.Print((char *) "\r\n");
+  //if (Serial1.available()) {
+  unsigned int bytesInBuffer = Serial1.available();
+  if (bytesInBuffer) {
+    if (bytesInBuffer > 1000) {
+      if (!json_mode) mySerCmd.Print((char *) "WARNING: Serial1 RX buffer (slam base) is close to or already overflowing (");
+      if (!json_mode) mySerCmd.Print(bytesInBuffer);
+      if (!json_mode) mySerCmd.Print((char *) ")\r\n");
+      if (json_mode) mySerCmd.Print((char *) "{\"warning\":\"Serial1 RX buffer (slam base) is close to or already overflowing\"}\r\n");
+    }
     Get_Packet();
   }
 }
@@ -367,7 +397,7 @@ void Set_Json(void) {
 
   if (enableParam == 0) {
     json_mode = false;
-    if (!json_mode) mySerCmd.Print((char *) "INFO: Json mode disabled\r\n");
+    if (!json_mode) mySerCmd.Print((char *) "INFO: JSON mode disabled\r\n");
   } else {
     json_mode = true;
     if (json_mode) json["success"] = "true";
@@ -512,7 +542,7 @@ void Send_Dock(void) {
 void Send_Kill(void) {
   behavior_control_frame[7] = 7;
 
-  if (!json_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (STOP)\r\n");
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Sending behavior_control_frame (KILL)\r\n");
   Send_Frame(behavior_control_frame, sizeof(behavior_control_frame));
 
   Get_Packet(behavior_control_frame[5]);
@@ -520,10 +550,10 @@ void Send_Kill(void) {
 }
 
 
-// Go to pose command. Must have a map created first.
+// Go to position command. Must have a map created first.
 // Parameters
 // float: x (meters), float: y (meters), float: angle (degrees), float: speed (m/s)
-// Example - "B_GOTO,0.5,0.5,0,10"
+// Example - "B_GOTO,2.1,-0.5,90,0.2"
 void Send_Goto(void) {
   float xParam = 0.0;
   float yParam = 0.0;
@@ -771,18 +801,41 @@ void Get_Status(void) {
   if (!json_mode) mySerCmd.Print((char *) "\r\n");
 
   // Offset to skip protocol header (assumed to be 4 bytes)
-  int offset = 4;
+  int offset = 7;
 
   // Extract all fields from synchronous_frame
-  uint16_t timestamp        = (uint16_t)(synchronous_frame[offset + 0] | (synchronous_frame[offset + 1] << 8));
-  uint16_t left_encoder     = (uint16_t)(synchronous_frame[offset + 2] | (synchronous_frame[offset + 3] << 8));
-  uint16_t right_encoder    = (uint16_t)(synchronous_frame[offset + 4] | (synchronous_frame[offset + 5] << 8));
+  uint32_t timestamp        = (uint32_t)(synchronous_frame[offset + 0] | (synchronous_frame[offset + 1] << 8));
+  int16_t left_encoder      = (int16_t)(synchronous_frame[offset + 2] | (synchronous_frame[offset + 3] << 8));
+  int16_t right_encoder     = (int16_t)(synchronous_frame[offset + 4] | (synchronous_frame[offset + 5] << 8));
   int16_t left_speed        = (int16_t)(synchronous_frame[offset + 6] | (synchronous_frame[offset + 7] << 8));
   int16_t right_speed       = (int16_t)(synchronous_frame[offset + 8] | (synchronous_frame[offset + 9] << 8));
   int16_t left_set_speed    = (int16_t)(synchronous_frame[offset + 10] | (synchronous_frame[offset + 11] << 8));
   int16_t right_set_speed   = (int16_t)(synchronous_frame[offset + 12] | (synchronous_frame[offset + 13] << 8));
   uint16_t wall_tof         = (uint16_t)(synchronous_frame[offset + 14] | (synchronous_frame[offset + 15] << 8));
+  
   uint16_t bit_flags        = (uint16_t)(synchronous_frame[offset + 16] | (synchronous_frame[offset + 17] << 8));
+
+  uint8_t bump_left = (bit_flags) & 1;
+  uint8_t bump_right = (bit_flags >> 1) & 1;
+
+  uint8_t wall_left = (bit_flags >> 2) & 1;
+  uint8_t wall_mid = (bit_flags >> 3) & 1;
+  uint8_t wall_right = (bit_flags >> 4) & 1;
+  uint8_t cliff_left = (bit_flags >> 5) & 1;
+
+  uint8_t cliff_front_left = (bit_flags >> 6) & 1;
+  uint8_t cliff_front_right = (bit_flags >> 7) & 1;
+  uint8_t cliff_right = (bit_flags >> 8) & 1;
+  uint8_t lidar_bump_a = (bit_flags >> 9) & 1;
+
+  uint8_t lidar_bump_b = (bit_flags >> 10) & 1;
+  uint8_t dc_plug = (bit_flags >> 11) & 1;
+  uint8_t dust_box = (bit_flags >> 12) & 1;
+  uint8_t mop_l = (bit_flags >> 13) & 1;
+
+  // Check if the robot is moving or not
+  bool moving = (left_speed != 0 && right_speed != 0 &&
+                 left_set_speed != 0 && right_set_speed != 0);
 
   // JSON output
   if (json_mode) {
@@ -798,6 +851,23 @@ void Get_Status(void) {
     json["right_set_speed"] = right_set_speed;
     json["wall_tof"] = wall_tof;
 
+    json["bump_left"] = bump_left;
+    json["bump_right"] = bump_right;
+    json["wall_left"] = wall_left;
+    json["wall_mid"] = wall_mid;
+    json["wall_right"] = wall_right;
+    json["cliff_left"] = cliff_left;
+    json["cliff_front_left"] = cliff_front_left;
+    json["cliff_front_right"] = cliff_front_right;
+    json["cliff_right"] = cliff_right;
+    json["lidar_bump_a"] = lidar_bump_a;
+    json["lidar_bump_b"] = lidar_bump_b;
+    json["dc_plug"] = dc_plug;
+    json["dust_box"] = dust_box;
+    json["mop_l"] = mop_l;
+
+    json["moving"] = moving;
+
     serializeJson(json, Serial);
     Serial.println();
   }
@@ -806,7 +876,7 @@ void Get_Status(void) {
   if (!json_mode) {
     sprintf(buffer, "INFO: Timestamp       = %u\r\n", timestamp);
     mySerCmd.Print(buffer);
-    sprintf(buffer, "INFO: Left Encoder    = %u, Right Encoder = %u\r\n", left_encoder, right_encoder);
+    sprintf(buffer, "INFO: Left Encoder    = %d, Right Encoder = %d\r\n", left_encoder, right_encoder);
     mySerCmd.Print(buffer);
     sprintf(buffer, "INFO: Left Speed      = %d, Right Speed   = %d\r\n", left_speed, right_speed);
     mySerCmd.Print(buffer);
@@ -816,23 +886,45 @@ void Get_Status(void) {
     mySerCmd.Print(buffer);
     sprintf(buffer, "INFO: Bit Flags (Raw) = 0x%04X\r\n", bit_flags);
     mySerCmd.Print(buffer);
-  }
 
-  // Check if action is considered "done"
-  bool action_done = (left_speed == 0 && right_speed == 0 &&
-                      left_set_speed == 0 && right_set_speed == 0);
+    mySerCmd.Print((char *)"INFO: Bump Left         = ");
+    mySerCmd.Print((char *)(bump_left ? "True\r\n" : "False\r\n"));
+    mySerCmd.Print((char *)"INFO: Bump Right        = ");
+    mySerCmd.Print((char *)(bump_right ? "True\r\n" : "False\r\n"));
+    mySerCmd.Print((char *)"INFO: Wall Left         = ");
+    mySerCmd.Print((char *)(wall_left ? "True\r\n" : "False\r\n"));
+    mySerCmd.Print((char *)"INFO: Wall Mid          = ");
+    mySerCmd.Print((char *)(wall_mid ? "True\r\n" : "False\r\n"));
+    mySerCmd.Print((char *)"INFO: Wall Right        = ");
+    mySerCmd.Print((char *)(wall_right ? "True\r\n" : "False\r\n"));
+    mySerCmd.Print((char *)"INFO: Cliff Left        = ");
+    mySerCmd.Print((char *)(cliff_left ? "True\r\n" : "False\r\n"));
+    mySerCmd.Print((char *)"INFO: Cliff Front Left  = ");
+    mySerCmd.Print((char *)(cliff_front_left ? "True\r\n" : "False\r\n"));
+    mySerCmd.Print((char *)"INFO: Cliff Front Right = ");
+    mySerCmd.Print((char *)(cliff_front_right ? "True\r\n" : "False\r\n"));
+    mySerCmd.Print((char *)"INFO: Cliff Right       = ");
+    mySerCmd.Print((char *)(cliff_right ? "True\r\n" : "False\r\n"));
+    mySerCmd.Print((char *)"INFO: Lidar Bump A      = ");
+    mySerCmd.Print((char *)(lidar_bump_a ? "True\r\n" : "False\r\n"));
+    mySerCmd.Print((char *)"INFO: Lidar Bump B      = ");
+    mySerCmd.Print((char *)(lidar_bump_b ? "True\r\n" : "False\r\n"));
+    mySerCmd.Print((char *)"INFO: DC Plug           = ");
+    mySerCmd.Print((char *)(dc_plug ? "True\r\n" : "False\r\n"));
+    mySerCmd.Print((char *)"INFO: Dust Box          = ");
+    mySerCmd.Print((char *)(dust_box ? "True\r\n" : "False\r\n"));
+    mySerCmd.Print((char *)"INFO: Mop L             = ");
+    mySerCmd.Print((char *)(mop_l ? "True\r\n" : "False\r\n"));
 
-  if (!json_mode) {
-    mySerCmd.Print((char *)"INFO: Action Status -> ");
-    mySerCmd.Print((char *)(action_done ? "DONE\r\n" : "IN PROGRESS\r\n"));
+    mySerCmd.Print((char *)"INFO: Moving            = ");
+    mySerCmd.Print((char *)(moving ? "True\r\n" : "False\r\n"));
   }
 
   sendOK();
 }
 
 
-
-// Get the latest saved pose packet
+// Get the latest saved position packet
 // Example - "B_POSE"
 void Get_Pose(void) {
   char hexString[3];
@@ -860,6 +952,7 @@ void Get_Pose(void) {
 
   // === Output either plain text or JSON ===
   if (!json_mode) {
+    mySerCmd.Print((char*)"INFO: ");
     mySerCmd.Print((char*)"map_id: ");
     mySerCmd.Print(map_id);
     mySerCmd.Print((char*)", pose_x: ");
@@ -926,7 +1019,7 @@ void set_H_IDLE(void) {
 // Parameters
 // float: yaw (rotation angle between 100.0 and 260.0 degrees - 180.0 is looking straight ahead)
 // float: pitch (vertical angle between 150.0 and 250.0 degrees - 180.0 is looking straight ahead)
-// Example - "H_LOOK, 180.0, 180.0, 20"
+// Example - "H_LOOK,180.0,180.0,20"
 void set_H_LOOK(void) {
   float turnParam = 0.0;
   float vertParam = 0.0;
@@ -981,7 +1074,7 @@ void set_H_LOOK(void) {
 // Parameters
 // float: x (position between -1.0 and 1.0)
 // float: y (position between -1.0 and 1.0)
-// Example - "GAZE,-0.8,0.2"
+// Example - "H_GAZE,-0.8,0.2"
 void set_H_GAZE(void) {
   float eyeTargetX = 0.0;
   float eyeTargetY = 0.0;
@@ -1000,9 +1093,11 @@ void set_H_GAZE(void) {
   eyeTargetX = constrain(eyeTargetX, -1.0, 1.0);
   eyeTargetY = constrain(eyeTargetY, -1.0, 1.0);
 
-  char buf[128] = {0};
-  sprintf(buf, "INFO: Setting: eyeTargetX: %0.2f, eyeTargetY: %0.2f\r\n", eyeTargetX, eyeTargetY);
-  if (!json_mode) mySerCmd.Print(buf);
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Setting the eye gaze to eyeTargetX: ");
+  if (!json_mode) mySerCmd.Print(eyeTargetX);
+  if (!json_mode) mySerCmd.Print((char *) ", eyeTargetY: ");
+  if (!json_mode) mySerCmd.Print(eyeTargetY);
+  if (!json_mode) mySerCmd.Print((char *) "\r\n");
 
   // scale to fit an int8 for smaller i2c transport
   int8_t eyeTargetXInt8 = int8_t(eyeTargetX * 100.0);
