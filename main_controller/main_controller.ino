@@ -1074,7 +1074,7 @@ void set_H_LOOK(void) {
 // Parameters
 // float: x (position between -1.0 and 1.0)
 // float: y (position between -1.0 and 1.0)
-// Example - "GAZE,-0.8,0.2"
+// Example - "H_GAZE,-0.8,0.2"
 void set_H_GAZE(void) {
   float eyeTargetX = 0.0;
   float eyeTargetY = 0.0;
@@ -1093,9 +1093,11 @@ void set_H_GAZE(void) {
   eyeTargetX = constrain(eyeTargetX, -1.0, 1.0);
   eyeTargetY = constrain(eyeTargetY, -1.0, 1.0);
 
-  char buf[128] = {0};
-  sprintf(buf, "INFO: Setting: eyeTargetX: %0.2f, eyeTargetY: %0.2f\r\n", eyeTargetX, eyeTargetY);
-  if (!json_mode) mySerCmd.Print(buf);
+  if (!json_mode) mySerCmd.Print((char *) "INFO: Setting the eye gaze to eyeTargetX: ");
+  if (!json_mode) mySerCmd.Print(eyeTargetX);
+  if (!json_mode) mySerCmd.Print((char *) ", eyeTargetY: ");
+  if (!json_mode) mySerCmd.Print(eyeTargetY);
+  if (!json_mode) mySerCmd.Print((char *) "\r\n");
 
   // scale to fit an int8 for smaller i2c transport
   int8_t eyeTargetXInt8 = int8_t(eyeTargetX * 100.0);
